@@ -1,0 +1,24 @@
+{
+  "name": "stock-screener",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @stock-screener/api dev",
+    "dev:worker": "pnpm --filter @stock-screener/worker dev",
+    "dev:web": "pnpm --filter @stock-screener/web dev",
+    "build": "pnpm -r build",
+    "build:api": "pnpm --filter @stock-screener/api build",
+    "build:worker": "pnpm --filter @stock-screener/worker build",
+    "build:web": "pnpm --filter @stock-screener/web build",
+    "db:migrate": "pnpm --filter @stock-screener/api db:migrate",
+    "db:generate": "pnpm --filter @stock-screener/api db:generate",
+    "db:push": "pnpm --filter @stock-screener/api db:push",
+    "db:studio": "pnpm --filter @stock-screener/api db:studio",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "clean": "pnpm -r clean"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

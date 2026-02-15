@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Exchange ───────────────────────────────────────────
+
+model Exchange {
+  id       String  @id // "US", "PA", "LSE", "XETRA"
+  name     String // "NASDAQ", "Euronext Paris"
+  country  String
+  currency String // "USD", "EUR", "GBP"
+  timezone String
+
+  stocks Stock[]
+
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Stock (denormalized for screener performance) ──────
+
+model Stock {
+  id         String   @id @default(cuid())
+  ticker     String // "AAPL"
+  exchange   Exchange @relation(fields: [exchangeId], references: [id])
+  exchangeId String
+  name       String // "Apple Inc."
+  isin       String?
+  type       String   @default("Common Stock") // "Common Stock", "ETF", "Fund"
+  sector     String?
+  industry   String?
+  currency   String // "USD"
+  isActive   Boolean  @default(true)
+
+  // ── Denormalized fundamentals (latest snapshot) ──
+  marketCap       Float?
+  peRatio         Float?
+  forwardPe       Float?
+  pegRatio        Float?
+  eps             Float?
+  revenue         Float?
+  revenueGrowth   Float? // YoY quarterly
+  grossMargin     Float? // as decimal 0.0 - 1.0
+  operatingMargin Float?
+  netMargin       Float?
+  roe             Float?
+  debtToEquity    Float?
+  dividendYield   Float?
+  beta            Float?
+  week52High      Float?
+  week52Low       Float?
+  evToEbitda      Float?
+  pbRatio         Float?
+
+  // ── Denormalized latest price ──
+  lastPrice      Float?
+  lastVolume     BigInt?
+  priceUpdatedAt DateTime?
+
+  // ── Relations ──
+  priceHistory DailyPrice[]
+  fundamentals Fundamentals[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ticker, exchangeId])
+  @@index([sector])
+  @@index([industry])
+  @@index([marketCap])
+  @@index([peRatio])
+  @@index([lastPrice])
+  @@index([dividendYield])
+  @@index([isActive])
+  @@index([exchangeId, isActive])
+}
+
+// ─── Daily Prices ───────────────────────────────────────
+
+model DailyPrice {
+  id       String   @id @default(cuid())
+  stock    Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  stockId  String
+  date     DateTime @db.Date
+  open     Float
+  high     Float
+  low      Float
+  close    Float
+  adjClose Float // Adjusted for splits + dividends
+  volume   BigInt
+
+  @@unique([stockId, date])
+  @@index([date])
+  @@index([stockId, date(sort: Desc)])
+}
+
+// ─── Fundamental Snapshots ──────────────────────────────
+
+model Fundamentals {
+  id      String   @id @default(cuid())
+  stock   Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  stockId String
+  period  String // "Q1-2024", "FY-2024"
+  type    String // "quarterly" | "annual"
+  date    DateTime @db.Date
+
+  // Income Statement
+  revenue         Float?
+  grossProfit     Float?
+  operatingIncome Float?
+  netIncome       Float?
+  eps             Float?
+
+  // Balance Sheet
+  totalAssets  Float?
+  totalDebt    Float?
+  totalEquity  Float?
+  cashAndEquiv Float?
+
+  // Cash Flow
+  operatingCF  Float?
+  capex        Float?
+  freeCashFlow Float?
+
+  // Ratios
+  peRatio    Float?
+  pbRatio    Float?
+  evToEbitda Float?
+
+  createdAt DateTime @default(now())
+
+  @@unique([stockId, period])
+  @@index([date])
+  @@index([stockId, type])
+}
+
+// ─── Sync Job Tracking ──────────────────────────────────
+
+model SyncJob {
+  id               String    @id @default(cuid())
+  jobName          String    @unique // "sync-eod", "sync-fundamentals", "sync-tickers"
+  lastRunAt        DateTime?
+  lastSuccessAt    DateTime?
+  lastError        String?
+  tickersProcessed Int       @default(0)
+  durationMs       Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
