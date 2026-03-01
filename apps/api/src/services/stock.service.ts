@@ -79,7 +79,7 @@ export async function getStockFundamentals(
  * Get distinct values for filter dropdowns.
  */
 export async function getFilterOptions(prisma: PrismaClient) {
-  const [sectors, industries, exchanges] = await Promise.all([
+  const [sectors, industries, exchanges, countries] = await Promise.all([
     prisma.stock.findMany({
       where: { isActive: true, sector: { not: null } },
       distinct: ["sector"],
@@ -96,11 +96,17 @@ export async function getFilterOptions(prisma: PrismaClient) {
       select: { id: true, name: true, country: true },
       orderBy: { name: "asc" },
     }),
+    prisma.exchange.findMany({
+      distinct: ["country"],
+      select: { country: true },
+      orderBy: { country: "asc" },
+    }),
   ]);
 
   return {
     sectors: sectors.map((s) => s.sector).filter(Boolean) as string[],
     industries: industries.map((i) => i.industry).filter(Boolean) as string[],
     exchanges,
+    countries: countries.map((c) => c.country),
   };
 }

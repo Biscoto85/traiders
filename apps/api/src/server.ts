@@ -2,7 +2,10 @@ import Fastify from "fastify";
 import { config } from "./config.js";
 import prismaPlugin from "./plugins/prisma.js";
 import corsPlugin from "./plugins/cors.js";
+import rateLimitPlugin from "./plugins/rate-limit.js";
+import jwtPlugin from "./plugins/jwt.js";
 import { healthRoutes } from "./routes/health.js";
+import { authRoutes } from "./routes/auth.js";
 import { stockRoutes } from "./routes/stocks.js";
 import { screenerRoutes } from "./routes/screener.js";
 
@@ -21,12 +24,20 @@ async function main() {
 
   // ── Plugins ──
   await fastify.register(corsPlugin);
+  await fastify.register(rateLimitPlugin);
   await fastify.register(prismaPlugin);
+  await fastify.register(jwtPlugin);
 
-  // ── Routes ──
+  // ── Public routes ──
   await fastify.register(healthRoutes);
-  await fastify.register(stockRoutes, { prefix: "/api/v1" });
-  await fastify.register(screenerRoutes, { prefix: "/api/v1" });
+  await fastify.register(authRoutes, { prefix: "/api/v1" });
+
+  // ── Protected routes (require JWT) ──
+  await fastify.register(async function protectedRoutes(instance) {
+    instance.addHook("onRequest", instance.authenticate);
+    await instance.register(stockRoutes, { prefix: "/api/v1" });
+    await instance.register(screenerRoutes, { prefix: "/api/v1" });
+  });
 
   // ── Start ──
   try {
@@ -35,7 +46,7 @@ async function main() {
       host: config.api.host,
     });
     fastify.log.info(
-      `Stock Screener API running on http://${config.api.host}:${config.api.port}`,
+      `Traiders API running on http://${config.api.host}:${config.api.port}`,
     );
   } catch (err) {
     fastify.log.error(err);

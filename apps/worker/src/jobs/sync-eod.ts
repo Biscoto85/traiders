@@ -88,6 +88,24 @@ export async function runSyncEod(
         totalProcessed += batch.length;
       }
 
+      // Recalculate pctFrom52WeekHigh/Low for all stocks on this exchange
+      await prisma.$executeRaw`
+        UPDATE "Stock"
+        SET "pctFrom52WeekHigh" = CASE
+              WHEN "lastPrice" IS NOT NULL AND "week52High" IS NOT NULL AND "week52High" != 0
+              THEN ("lastPrice" - "week52High") / "week52High"
+              ELSE NULL
+            END,
+            "pctFrom52WeekLow" = CASE
+              WHEN "lastPrice" IS NOT NULL AND "week52Low" IS NOT NULL AND "week52Low" != 0
+              THEN ("lastPrice" - "week52Low") / "week52Low"
+              ELSE NULL
+            END
+        WHERE "exchangeId" = ${exchangeId}
+          AND "lastPrice" IS NOT NULL
+          AND ("week52High" IS NOT NULL OR "week52Low" IS NOT NULL)
+      `;
+
       console.log(`[${jobName}] ${exchangeId}: ${bulkData.length} tickers synced`);
     }
 

@@ -56,6 +56,10 @@ model Stock {
   evToEbitda      Float?
   pbRatio         Float?
 
+  // ── Computed relative price fields ──
+  pctFrom52WeekHigh Float? // (lastPrice - week52High) / week52High, e.g. -0.15 = 15% below
+  pctFrom52WeekLow  Float? // (lastPrice - week52Low) / week52Low, e.g. 0.30 = 30% above
+
   // ── Denormalized latest price ──
   lastPrice      Float?
   lastVolume     BigInt?
@@ -136,6 +140,19 @@ model Fundamentals {
   @@unique([stockId, period])
   @@index([date])
   @@index([stockId, type])
+}
+
+// ─── User ───────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String // bcrypt hash
+  name      String
+  role      String   @default("viewer") // "admin" | "viewer"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── Sync Job Tracking ──────────────────────────────────

@@ -54,3 +54,7 @@ export {
   formatRatio,
   formatVolume,
 } from "./utils/format.js";
+
+// Data
+export { KNOWN_EXCHANGES } from "./data/exchanges.js";
+export type { ExchangeCode } from "./data/exchanges.js";

@@ -60,6 +60,15 @@ export async function runSyncFundamentals(
             return isNaN(n) ? null : n;
           };
 
+          // Fetch current lastPrice to compute relative 52-week fields
+          const currentStock = await prisma.stock.findUnique({
+            where: { id: stock.id },
+            select: { lastPrice: true },
+          });
+          const lastPrice = currentStock?.lastPrice ?? null;
+          const w52High = data.Technicals["52WeekHigh"];
+          const w52Low = data.Technicals["52WeekLow"];
+
           // Update denormalized fields on Stock
           await prisma.stock.update({
             where: { id: stock.id },
@@ -82,10 +91,18 @@ export async function runSyncFundamentals(
               roe: data.Highlights.ReturnOnEquityTTM,
               dividendYield: data.Highlights.DividendYield,
               beta: data.Technicals.Beta,
-              week52High: data.Technicals["52WeekHigh"],
-              week52Low: data.Technicals["52WeekLow"],
+              week52High: w52High,
+              week52Low: w52Low,
               evToEbitda: data.Valuation.EnterpriseValueEbitda,
               pbRatio: data.Valuation.PriceBookMRQ,
+              pctFrom52WeekHigh:
+                lastPrice != null && w52High != null && w52High !== 0
+                  ? (lastPrice - w52High) / w52High
+                  : null,
+              pctFrom52WeekLow:
+                lastPrice != null && w52Low != null && w52Low !== 0
+                  ? (lastPrice - w52Low) / w52Low
+                  : null,
             },
           });
 

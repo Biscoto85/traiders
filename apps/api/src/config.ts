@@ -30,8 +30,12 @@ export const config = {
     baseUrl: optionalEnv("EODHD_BASE_URL", "https://eodhd.com/api"),
   },
 
+  auth: {
+    jwtSecret: requireEnv("JWT_SECRET"),
+  },
+
   cors: {
-    origin: optionalEnv("WEB_URL", "http://localhost:3000"),
+    origin: optionalEnv("WEB_URL", "http://localhost:5173"),
   },
 
   log: {

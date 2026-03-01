@@ -32,6 +32,9 @@ export function buildScreenerQuery(
   if (filters.industries?.length) {
     where.industry = { in: filters.industries };
   }
+  if (filters.countries?.length) {
+    where.exchange = { country: { in: filters.countries } };
+  }
 
   // ── Range filters (map to Prisma gte/lte) ──
   const rangeMap: Array<[keyof ScreenerFilters, keyof Prisma.StockWhereInput]> = [
@@ -63,13 +66,18 @@ export function buildScreenerQuery(
     }
   }
 
-  // ── 52-week relative filters (computed) ──
-  // These require lastPrice + week52High/Low to be present
-  // We handle them as AND conditions
+  // ── 52-week relative filters (uses denormalized computed fields) ──
   if (filters.pctFrom52WeekHigh) {
-    // pctFrom52WeekHigh = (lastPrice - week52High) / week52High
-    // This requires raw SQL, we'll add as a post-filter or use Prisma raw
-    // For MVP, we skip these computed filters and add them later
+    const condition: Prisma.FloatNullableFilter = {};
+    if (filters.pctFrom52WeekHigh.min !== undefined) condition.gte = filters.pctFrom52WeekHigh.min;
+    if (filters.pctFrom52WeekHigh.max !== undefined) condition.lte = filters.pctFrom52WeekHigh.max;
+    where.pctFrom52WeekHigh = condition;
+  }
+  if (filters.pctFrom52WeekLow) {
+    const condition: Prisma.FloatNullableFilter = {};
+    if (filters.pctFrom52WeekLow.min !== undefined) condition.gte = filters.pctFrom52WeekLow.min;
+    if (filters.pctFrom52WeekLow.max !== undefined) condition.lte = filters.pctFrom52WeekLow.max;
+    where.pctFrom52WeekLow = condition;
   }
 
   // ── Sort ──

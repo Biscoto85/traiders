@@ -1,0 +1,25 @@
+FROM node:20-slim AS base
+RUN corepack enable && corepack prepare pnpm@9 --activate
+WORKDIR /app
+
+# Install dependencies
+FROM base AS deps
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY packages/shared/package.json packages/shared/
+COPY apps/web/package.json apps/web/
+RUN pnpm install --frozen-lockfile
+
+# Build
+FROM deps AS build
+COPY tsconfig.base.json ./
+COPY packages/shared/ packages/shared/
+COPY apps/web/ apps/web/
+RUN pnpm --filter @stock-screener/shared build
+RUN pnpm --filter @stock-screener/web build
+
+# Production — serve static files via nginx
+FROM nginx:alpine AS production
+COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

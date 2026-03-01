@@ -21,9 +21,11 @@ export async function runSyncTickers(
   let totalProcessed = 0;
 
   try {
+    // Fetch exchange list once (not per exchange)
+    const exchangeInfo = await eodhd.eod.getExchangesList();
+
     for (const exchangeId of exchanges) {
       // Ensure exchange record exists
-      const exchangeInfo = await eodhd.eod.getExchangesList();
       const exInfo = exchangeInfo.find((e) => e.Code === exchangeId);
 
       if (exInfo) {
