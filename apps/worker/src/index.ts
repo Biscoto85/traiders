@@ -5,9 +5,10 @@ import { config } from "./config.js";
 import { runSyncEod } from "./jobs/sync-eod.js";
 import { runSyncFundamentals } from "./jobs/sync-fundamentals.js";
 import { runSyncTickers } from "./jobs/sync-tickers.js";
+import { runEmailDigests } from "./jobs/send-email-digests.js";
 
 async function main() {
-  console.log("Stock Screener Worker starting...");
+  console.log("Traiders Worker starting...");
   console.log(`Exchanges: ${config.exchanges.join(", ")}`);
 
   const prisma = new PrismaClient({
@@ -64,6 +65,32 @@ async function main() {
   });
   jobs.push(tickersJob);
   console.log(`Tickers sync scheduled: ${config.cron.syncTickers}`);
+
+  // Email digests: weekly (Monday 8am Paris time)
+  const mailConfig = {
+    host: config.smtp.host,
+    port: config.smtp.port,
+    secure: config.smtp.secure,
+    user: config.smtp.user,
+    pass: config.smtp.pass,
+    from: config.smtp.from,
+  };
+
+  if (config.smtp.host) {
+    const weeklyDigestJob = CronJob.from({
+      cronTime: config.cron.emailDigestWeekly,
+      onTick: () => {
+        runEmailDigests(prisma, "weekly", mailConfig).catch((err) =>
+          console.error("Weekly email digest cron error:", err),
+        );
+      },
+      timeZone: "Europe/Paris",
+    });
+    jobs.push(weeklyDigestJob);
+    console.log(`Weekly email digest scheduled: ${config.cron.emailDigestWeekly}`);
+  } else {
+    console.log("SMTP not configured — email digests disabled");
+  }
 
   // ── Start all jobs ──
   for (const job of jobs) {

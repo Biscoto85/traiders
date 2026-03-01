@@ -42,19 +42,35 @@ model Stock {
   forwardPe       Float?
   pegRatio        Float?
   eps             Float?
+  dilutedEps      Float? // Diluted EPS TTM
   revenue         Float?
   revenueGrowth   Float? // YoY quarterly
+  earningsGrowth  Float? // YoY quarterly earnings growth
   grossMargin     Float? // as decimal 0.0 - 1.0
   operatingMargin Float?
   netMargin       Float?
   roe             Float?
+  roa             Float? // Return on Assets TTM
   debtToEquity    Float?
+  currentRatio    Float? // currentAssets / currentLiabilities
   dividendYield   Float?
   beta            Float?
   week52High      Float?
   week52Low       Float?
   evToEbitda      Float?
+  evToRevenue     Float? // Enterprise Value / Revenue
   pbRatio         Float?
+  psRatio         Float? // Price / Sales TTM
+  enterpriseValue Float?
+  ebitda          Float? // EBITDA from Highlights
+  freeCashFlow    Float? // FCF from latest data
+  fcfYield        Float? // freeCashFlow / marketCap
+
+  // ── Analyst / ownership ──
+  targetPrice        Float? // Wall Street consensus target
+  pctInsiders        Float? // % held by insiders
+  pctInstitutions    Float? // % held by institutions
+  shortPctFloat      Float? // short interest as % of float
 
   // ── Computed relative price fields ──
   pctFrom52WeekHigh Float? // (lastPrice - week52High) / week52High, e.g. -0.15 = 15% below
@@ -79,6 +95,11 @@ model Stock {
   @@index([peRatio])
   @@index([lastPrice])
   @@index([dividendYield])
+  @@index([roe])
+  @@index([roa])
+  @@index([netMargin])
+  @@index([debtToEquity])
+  @@index([psRatio])
   @@index([isActive])
   @@index([exchangeId, isActive])
 }
@@ -119,11 +140,15 @@ model Fundamentals {
   netIncome       Float?
   eps             Float?
 
+  ebitda          Float?
+
   // Balance Sheet
-  totalAssets  Float?
-  totalDebt    Float?
-  totalEquity  Float?
-  cashAndEquiv Float?
+  totalAssets          Float?
+  totalCurrentAssets   Float?
+  totalDebt            Float?
+  totalCurrentLiab     Float?
+  totalEquity          Float?
+  cashAndEquiv         Float?
 
   // Cash Flow
   operatingCF  Float?
@@ -147,12 +172,49 @@ model Fundamentals {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  password  String // bcrypt hash
+  password  String // scrypt hash
   name      String
-  role      String   @default("viewer") // "admin" | "viewer"
+  role      String   @default("viewer") // "super_admin" | "admin" | "viewer"
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  presets       ScreenerPreset[]
+  emailDigests  EmailDigest[]
+}
+
+// ─── Screener Presets (saved filter combos) ─────────────
+
+model ScreenerPreset {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String // "Value + Quality", "Dividend Kings", etc.
+  filters   Json // ScreenerFilters as JSON
+  sort      Json? // { field, direction }
+  isPublic  Boolean  @default(false) // visible to all users
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ─── Email Digest Configuration ─────────────────────────
+
+model EmailDigest {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String // "My weekly value screen"
+  filters   Json // ScreenerFilters snapshot
+  schedule  String   @default("weekly") // "daily" | "weekly"
+  isActive  Boolean  @default(true)
+  lastSentAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isActive, schedule])
 }
 
 // ─── Sync Job Tracking ──────────────────────────────────

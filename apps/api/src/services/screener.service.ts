@@ -38,21 +38,42 @@ export function buildScreenerQuery(
 
   // ── Range filters (map to Prisma gte/lte) ──
   const rangeMap: Array<[keyof ScreenerFilters, keyof Prisma.StockWhereInput]> = [
+    // Valuation
     ["peRatio", "peRatio"],
     ["forwardPe", "forwardPe"],
     ["pegRatio", "pegRatio"],
     ["pbRatio", "pbRatio"],
+    ["psRatio", "psRatio"],
     ["evToEbitda", "evToEbitda"],
+    ["evToRevenue", "evToRevenue"],
+    // Size & price
     ["marketCap", "marketCap"],
     ["price", "lastPrice"],
+    ["enterpriseValue", "enterpriseValue"],
+    // Profitability
     ["grossMargin", "grossMargin"],
     ["operatingMargin", "operatingMargin"],
     ["netMargin", "netMargin"],
     ["roe", "roe"],
+    ["roa", "roa"],
+    // Growth
     ["revenueGrowth", "revenueGrowth"],
+    ["earningsGrowth", "earningsGrowth"],
+    // Yield & income
     ["dividendYield", "dividendYield"],
+    ["fcfYield", "fcfYield"],
+    // Risk & leverage
     ["beta", "beta"],
     ["debtToEquity", "debtToEquity"],
+    ["currentRatio", "currentRatio"],
+    // 52-week relative
+    ["pctFrom52WeekHigh", "pctFrom52WeekHigh"],
+    ["pctFrom52WeekLow", "pctFrom52WeekLow"],
+    // Analyst & ownership
+    ["targetPrice", "targetPrice"],
+    ["pctInsiders", "pctInsiders"],
+    ["pctInstitutions", "pctInstitutions"],
+    ["shortPctFloat", "shortPctFloat"],
   ];
 
   for (const [filterKey, dbField] of rangeMap) {
@@ -64,20 +85,6 @@ export function buildScreenerQuery(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (where as any)[dbField] = condition;
     }
-  }
-
-  // ── 52-week relative filters (uses denormalized computed fields) ──
-  if (filters.pctFrom52WeekHigh) {
-    const condition: Prisma.FloatNullableFilter = {};
-    if (filters.pctFrom52WeekHigh.min !== undefined) condition.gte = filters.pctFrom52WeekHigh.min;
-    if (filters.pctFrom52WeekHigh.max !== undefined) condition.lte = filters.pctFrom52WeekHigh.max;
-    where.pctFrom52WeekHigh = condition;
-  }
-  if (filters.pctFrom52WeekLow) {
-    const condition: Prisma.FloatNullableFilter = {};
-    if (filters.pctFrom52WeekLow.min !== undefined) condition.gte = filters.pctFrom52WeekLow.min;
-    if (filters.pctFrom52WeekLow.max !== undefined) condition.lte = filters.pctFrom52WeekLow.max;
-    where.pctFrom52WeekLow = condition;
   }
 
   // ── Sort ──
@@ -138,18 +145,28 @@ export async function executeScreenerQuery(
         forwardPe: true,
         pegRatio: true,
         eps: true,
+        dilutedEps: true,
         dividendYield: true,
         revenueGrowth: true,
+        earningsGrowth: true,
         grossMargin: true,
         operatingMargin: true,
         netMargin: true,
         roe: true,
+        roa: true,
         debtToEquity: true,
+        currentRatio: true,
         beta: true,
         week52High: true,
         week52Low: true,
+        pctFrom52WeekHigh: true,
+        pctFrom52WeekLow: true,
         evToEbitda: true,
+        evToRevenue: true,
         pbRatio: true,
+        psRatio: true,
+        fcfYield: true,
+        targetPrice: true,
         priceUpdatedAt: true,
       },
     }),

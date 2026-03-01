@@ -23,11 +23,29 @@ export const screenerSortFieldSchema = z.enum([
   "lastPrice",
   "marketCap",
   "peRatio",
+  "forwardPe",
+  "pegRatio",
+  "pbRatio",
+  "psRatio",
+  "evToEbitda",
+  "evToRevenue",
   "dividendYield",
   "revenueGrowth",
+  "earningsGrowth",
+  "grossMargin",
+  "operatingMargin",
+  "netMargin",
+  "roe",
+  "roa",
+  "debtToEquity",
+  "currentRatio",
+  "fcfYield",
+  "beta",
   "volume",
   "week52High",
   "week52Low",
+  "pctFrom52WeekHigh",
+  "pctFrom52WeekLow",
 ]);
 
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -43,28 +61,49 @@ export const screenerFiltersSchema = z.object({
   industries: z.array(z.string().min(1).max(100)).optional(),
   countries: z.array(z.string().min(1).max(5)).optional(),
 
+  // Valuation
   peRatio: rangeFilterSchema.optional(),
   forwardPe: rangeFilterSchema.optional(),
   pegRatio: rangeFilterSchema.optional(),
   pbRatio: rangeFilterSchema.optional(),
+  psRatio: rangeFilterSchema.optional(),
   evToEbitda: rangeFilterSchema.optional(),
+  evToRevenue: rangeFilterSchema.optional(),
 
+  // Size & price
   marketCap: rangeFilterSchema.optional(),
   price: rangeFilterSchema.optional(),
+  enterpriseValue: rangeFilterSchema.optional(),
 
+  // Profitability
   grossMargin: rangeFilterSchema.optional(),
   operatingMargin: rangeFilterSchema.optional(),
   netMargin: rangeFilterSchema.optional(),
   roe: rangeFilterSchema.optional(),
+  roa: rangeFilterSchema.optional(),
 
+  // Growth
   revenueGrowth: rangeFilterSchema.optional(),
-  dividendYield: rangeFilterSchema.optional(),
+  earningsGrowth: rangeFilterSchema.optional(),
 
+  // Yield & income
+  dividendYield: rangeFilterSchema.optional(),
+  fcfYield: rangeFilterSchema.optional(),
+
+  // Risk & leverage
   beta: rangeFilterSchema.optional(),
   debtToEquity: rangeFilterSchema.optional(),
+  currentRatio: rangeFilterSchema.optional(),
 
+  // Technical / relative
   pctFrom52WeekHigh: rangeFilterSchema.optional(),
   pctFrom52WeekLow: rangeFilterSchema.optional(),
+
+  // Analyst & ownership
+  targetPrice: rangeFilterSchema.optional(),
+  pctInsiders: rangeFilterSchema.optional(),
+  pctInstitutions: rangeFilterSchema.optional(),
+  shortPctFloat: rangeFilterSchema.optional(),
 });
 
 export const screenerRequestSchema = z.object({

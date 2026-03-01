@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { api, type StockSummary, type FilterOptions } from "@/lib/api";
 import { formatMarketCap, formatPercent, formatRatio } from "@stock-screener/shared";
 
@@ -123,7 +124,7 @@ export default function ScreenerPage() {
           <tbody>
             {stocks.map((stock) => (
               <tr key={stock.id}>
-                <td><strong>{stock.ticker}</strong></td>
+                <td><Link to={`/stock/${stock.ticker}?exchange=${stock.exchangeId}`}><strong>{stock.ticker}</strong></Link></td>
                 <td style={{ maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis" }}>{stock.name}</td>
                 <td>{stock.sector ?? "—"}</td>
                 <td className="text-right">{stock.lastPrice?.toFixed(2) ?? "—"}</td>

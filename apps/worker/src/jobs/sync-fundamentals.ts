@@ -60,7 +60,7 @@ export async function runSyncFundamentals(
             return isNaN(n) ? null : n;
           };
 
-          // Fetch current lastPrice to compute relative 52-week fields
+          // Fetch current lastPrice to compute relative fields
           const currentStock = await prisma.stock.findUnique({
             where: { id: stock.id },
             select: { lastPrice: true },
@@ -68,6 +68,27 @@ export async function runSyncFundamentals(
           const lastPrice = currentStock?.lastPrice ?? null;
           const w52High = data.Technicals["52WeekHigh"];
           const w52Low = data.Technicals["52WeekLow"];
+          const mktCap = data.Highlights.MarketCapitalization;
+          const ebitda = data.Highlights.EBITDA;
+
+          // Derive current ratio from latest quarterly balance sheet
+          const latestQBS = Object.values(
+            data.Financials?.Balance_Sheet?.quarterly ?? {},
+          )[0];
+          const curAssets = latestQBS ? parseNum(latestQBS.totalCurrentAssets) : null;
+          const curLiab = latestQBS ? parseNum(latestQBS.totalCurrentLiabilities) : null;
+          const currentRatio =
+            curAssets != null && curLiab != null && curLiab !== 0
+              ? curAssets / curLiab
+              : null;
+
+          // Derive FCF from latest quarterly cash flow
+          const latestQCF = Object.values(
+            data.Financials?.Cash_Flow?.quarterly ?? {},
+          )[0];
+          const fcf = latestQCF ? parseNum(latestQCF.freeCashFlow) : null;
+          const fcfYield =
+            fcf != null && mktCap != null && mktCap > 0 ? fcf / mktCap : null;
 
           // Update denormalized fields on Stock
           await prisma.stock.update({
@@ -75,13 +96,15 @@ export async function runSyncFundamentals(
             data: {
               sector: data.General.Sector || null,
               industry: data.General.Industry || null,
-              marketCap: data.Highlights.MarketCapitalization,
+              marketCap: mktCap,
               peRatio: data.Valuation.TrailingPE,
               forwardPe: data.Valuation.ForwardPE,
               pegRatio: data.Highlights.PEGRatio,
               eps: data.Highlights.EarningsShare,
+              dilutedEps: data.Highlights.DilutedEpsTTM,
               revenue: data.Highlights.RevenueTTM,
               revenueGrowth: data.Highlights.QuarterlyRevenueGrowthYOY,
+              earningsGrowth: data.Highlights.QuarterlyEarningsGrowthYOY,
               grossMargin:
                 data.Highlights.GrossProfitTTM && data.Highlights.RevenueTTM
                   ? data.Highlights.GrossProfitTTM / data.Highlights.RevenueTTM
@@ -89,12 +112,24 @@ export async function runSyncFundamentals(
               operatingMargin: data.Highlights.OperatingMarginTTM,
               netMargin: data.Highlights.ProfitMargin,
               roe: data.Highlights.ReturnOnEquityTTM,
+              roa: data.Highlights.ReturnOnAssetsTTM,
               dividendYield: data.Highlights.DividendYield,
               beta: data.Technicals.Beta,
               week52High: w52High,
               week52Low: w52Low,
               evToEbitda: data.Valuation.EnterpriseValueEbitda,
+              evToRevenue: data.Valuation.EnterpriseValueRevenue,
               pbRatio: data.Valuation.PriceBookMRQ,
+              psRatio: data.Valuation.PriceSalesTTM,
+              enterpriseValue: data.Valuation.EnterpriseValue,
+              ebitda,
+              freeCashFlow: fcf,
+              fcfYield,
+              currentRatio,
+              targetPrice: data.Highlights.WallStreetTargetPrice,
+              pctInsiders: data.SharesStats?.PercentInsiders ?? null,
+              pctInstitutions: data.SharesStats?.PercentInstitutions ?? null,
+              shortPctFloat: data.SharesStats?.ShortPercentFloat ?? null,
               pctFrom52WeekHigh:
                 lastPrice != null && w52High != null && w52High !== 0
                   ? (lastPrice - w52High) / w52High
@@ -137,9 +172,12 @@ export async function runSyncFundamentals(
                 grossProfit: parseNum(income.grossProfit),
                 operatingIncome: parseNum(income.operatingIncome),
                 netIncome: parseNum(income.netIncome),
+                ebitda: parseNum(income.ebitda),
                 eps: null,
                 totalAssets: parseNum(balance?.totalAssets),
+                totalCurrentAssets: parseNum(balance?.totalCurrentAssets),
                 totalDebt: parseNum(balance?.longTermDebt),
+                totalCurrentLiab: parseNum(balance?.totalCurrentLiabilities),
                 totalEquity: parseNum(balance?.totalStockholderEquity),
                 cashAndEquiv: parseNum(
                   balance?.cashAndShortTermInvestments,
@@ -156,8 +194,11 @@ export async function runSyncFundamentals(
                 grossProfit: parseNum(income.grossProfit),
                 operatingIncome: parseNum(income.operatingIncome),
                 netIncome: parseNum(income.netIncome),
+                ebitda: parseNum(income.ebitda),
                 totalAssets: parseNum(balance?.totalAssets),
+                totalCurrentAssets: parseNum(balance?.totalCurrentAssets),
                 totalDebt: parseNum(balance?.longTermDebt),
+                totalCurrentLiab: parseNum(balance?.totalCurrentLiabilities),
                 totalEquity: parseNum(balance?.totalStockholderEquity),
                 cashAndEquiv: parseNum(
                   balance?.cashAndShortTermInvestments,

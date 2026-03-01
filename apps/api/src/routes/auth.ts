@@ -62,9 +62,9 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    // First user is admin
+    // First user is super_admin
     const userCount = await fastify.prisma.user.count();
-    const role = userCount === 0 ? "admin" : "viewer";
+    const role = userCount === 0 ? "super_admin" : "viewer";
 
     const hashedPassword = await hashPassword(password);
 

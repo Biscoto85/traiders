@@ -1,8 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import ScreenerPage from "@/pages/ScreenerPage";
+import StockDetailPage from "@/pages/StockDetailPage";
 import type { ReactNode } from "react";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -19,11 +20,16 @@ function AppLayout() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <h1>Traiders</h1>
+        <Link to="/" style={{ textDecoration: "none", color: "inherit" }}>
+          <h1>Traiders</h1>
+        </Link>
         {user && (
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <span style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
               {user.name}
+              {user.role === "super_admin" && (
+                <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", color: "var(--primary)" }}>ADMIN</span>
+              )}
             </span>
             <button className="btn btn-ghost" onClick={logout}>
               Deconnexion
@@ -32,7 +38,7 @@ function AppLayout() {
         )}
       </header>
       <main className="app-main">
-        <ScreenerPage />
+        <Outlet />
       </main>
     </div>
   );
@@ -46,13 +52,15 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route
-            path="/*"
             element={
               <ProtectedRoute>
                 <AppLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route path="/" element={<ScreenerPage />} />
+            <Route path="/stock/:ticker" element={<StockDetailPage />} />
+          </Route>
         </Routes>
       </AuthProvider>
     </BrowserRouter>

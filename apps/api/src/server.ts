@@ -8,6 +8,8 @@ import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { stockRoutes } from "./routes/stocks.js";
 import { screenerRoutes } from "./routes/screener.js";
+import { presetRoutes } from "./routes/presets.js";
+import { adminRoutes } from "./routes/admin.js";
 
 async function main() {
   const fastify = Fastify({
@@ -37,6 +39,8 @@ async function main() {
     instance.addHook("onRequest", instance.authenticate);
     await instance.register(stockRoutes, { prefix: "/api/v1" });
     await instance.register(screenerRoutes, { prefix: "/api/v1" });
+    await instance.register(presetRoutes, { prefix: "/api/v1" });
+    await instance.register(adminRoutes, { prefix: "/api/v1" });
   });
 
   // ── Start ──
