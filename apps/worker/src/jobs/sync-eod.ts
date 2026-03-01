@@ -20,6 +20,13 @@ export async function runSyncEod(
 
   let totalProcessed = 0;
 
+  // Mark job as running
+  await prisma.syncJob.upsert({
+    where: { jobName },
+    create: { jobName, lastRunAt: startedAt },
+    update: { lastRunAt: startedAt, lastError: null, durationMs: null, tickersProcessed: 0 },
+  });
+
   try {
     for (const exchangeId of exchanges) {
       console.log(`[${jobName}] Fetching bulk EOD for ${exchangeId}...`);

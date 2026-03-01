@@ -18,6 +18,13 @@ export async function runSyncFundamentals(
 
   console.log(`[${jobName}] Starting fundamentals sync...`);
 
+  // Mark job as running
+  await prisma.syncJob.upsert({
+    where: { jobName },
+    create: { jobName, lastRunAt: startedAt },
+    update: { lastRunAt: startedAt, lastError: null, durationMs: null, tickersProcessed: 0 },
+  });
+
   const staleDate = new Date();
   staleDate.setDate(staleDate.getDate() - STALE_DAYS);
 

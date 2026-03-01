@@ -20,6 +20,13 @@ export async function runSyncTickers(
 
   let totalProcessed = 0;
 
+  // Mark job as running
+  await prisma.syncJob.upsert({
+    where: { jobName },
+    create: { jobName, lastRunAt: startedAt },
+    update: { lastRunAt: startedAt, lastError: null, durationMs: null, tickersProcessed: 0 },
+  });
+
   try {
     // Fetch exchange list once (not per exchange)
     const exchangeInfo = await eodhd.eod.getExchangesList();

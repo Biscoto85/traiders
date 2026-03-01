@@ -195,15 +195,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       updatedAt: job.updatedAt.toISOString(),
       status: pendingSync === job.jobName
         ? "pending"
-        : job.lastError
-          ? "error"
-          : job.lastSuccessAt
-            ? "success"
-            : "unknown",
+        : (job.durationMs === null && job.lastRunAt && !job.lastError)
+          ? "running"
+          : job.lastError
+            ? "error"
+            : job.lastSuccessAt
+              ? "success"
+              : "unknown",
       details: job.lastError
-        ?? (job.tickersProcessed
-          ? `${job.tickersProcessed} tickers en ${((job.durationMs ?? 0) / 1000).toFixed(0)}s`
-          : null),
+        ?? (job.durationMs === null && job.lastRunAt && !job.lastError
+          ? "En cours d'execution..."
+          : job.tickersProcessed
+            ? `${job.tickersProcessed} tickers en ${((job.durationMs ?? 0) / 1000).toFixed(0)}s`
+            : null),
     }));
 
     return reply.send({ success: true, data: enriched, pendingSync });
