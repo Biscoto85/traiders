@@ -324,7 +324,7 @@ export default function ScreenerPage() {
   const criteriaByCategory: Record<string, typeof CRITERIA_OPTIONS> = {};
   for (const c of availableCriteria) {
     if (!criteriaByCategory[c.category]) criteriaByCategory[c.category] = [];
-    criteriaByCategory[c.category].push(c);
+    criteriaByCategory[c.category]!.push(c);
   }
 
   // Generate page numbers to display
