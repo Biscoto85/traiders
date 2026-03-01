@@ -35,7 +35,9 @@ COPY --from=build /app/packages/eodhd-client/dist ./packages/eodhd-client/dist
 COPY --from=build /app/packages/eodhd-client/package.json ./packages/eodhd-client/
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 COPY --from=build /app/apps/worker/package.json ./apps/worker/
+COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY package.json pnpm-workspace.yaml ./
 
 WORKDIR /app/apps/worker
+RUN npx prisma generate --schema=/app/apps/api/prisma/schema.prisma
 CMD ["node", "dist/index.js"]
