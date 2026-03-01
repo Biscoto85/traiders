@@ -17,10 +17,16 @@ interface ScreenerQueryResult {
 export function buildScreenerQuery(
   filters: ScreenerFilters,
   sort?: ScreenerSort,
+  tickerStartsWith?: string,
 ): ScreenerQueryResult {
   const where: Prisma.StockWhereInput = {
     isActive: true,
   };
+
+  // ── Ticker letter filter ──
+  if (tickerStartsWith) {
+    where.ticker = { startsWith: tickerStartsWith.toUpperCase() };
+  }
 
   // ── Classification filters ──
   if (filters.exchanges?.length) {
@@ -128,8 +134,49 @@ export function buildScreenerQuery(
   return { where, orderBy };
 }
 
+const SCREENER_SELECT = {
+  id: true,
+  ticker: true,
+  exchangeId: true,
+  name: true,
+  sector: true,
+  industry: true,
+  currency: true,
+  isActive: true,
+  lastPrice: true,
+  lastVolume: true,
+  marketCap: true,
+  peRatio: true,
+  forwardPe: true,
+  pegRatio: true,
+  eps: true,
+  dilutedEps: true,
+  dividendYield: true,
+  revenueGrowth: true,
+  earningsGrowth: true,
+  grossMargin: true,
+  operatingMargin: true,
+  netMargin: true,
+  roe: true,
+  roa: true,
+  debtToEquity: true,
+  currentRatio: true,
+  beta: true,
+  week52High: true,
+  week52Low: true,
+  pctFrom52WeekHigh: true,
+  pctFrom52WeekLow: true,
+  evToEbitda: true,
+  evToRevenue: true,
+  pbRatio: true,
+  psRatio: true,
+  fcfYield: true,
+  targetPrice: true,
+  priceUpdatedAt: true,
+} as const;
+
 /**
- * Execute screener query with cursor-based pagination.
+ * Execute screener query with cursor or offset-based pagination.
  */
 export async function executeScreenerQuery(
   prisma: PrismaClient,
@@ -137,56 +184,26 @@ export async function executeScreenerQuery(
   sort?: ScreenerSort,
   cursor?: string,
   limit = 50,
+  offset?: number,
+  tickerStartsWith?: string,
 ) {
-  const { where, orderBy } = buildScreenerQuery(filters, sort);
+  const { where, orderBy } = buildScreenerQuery(filters, sort, tickerStartsWith);
+
+  // Determine pagination strategy
+  const useOffset = offset !== undefined && offset >= 0;
 
   const [totalCount, results] = await Promise.all([
     prisma.stock.count({ where }),
     prisma.stock.findMany({
       where,
       orderBy,
-      take: limit + 1, // fetch one extra to determine if there's a next page
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: {
-        id: true,
-        ticker: true,
-        exchangeId: true,
-        name: true,
-        sector: true,
-        industry: true,
-        currency: true,
-        isActive: true,
-        lastPrice: true,
-        lastVolume: true,
-        marketCap: true,
-        peRatio: true,
-        forwardPe: true,
-        pegRatio: true,
-        eps: true,
-        dilutedEps: true,
-        dividendYield: true,
-        revenueGrowth: true,
-        earningsGrowth: true,
-        grossMargin: true,
-        operatingMargin: true,
-        netMargin: true,
-        roe: true,
-        roa: true,
-        debtToEquity: true,
-        currentRatio: true,
-        beta: true,
-        week52High: true,
-        week52Low: true,
-        pctFrom52WeekHigh: true,
-        pctFrom52WeekLow: true,
-        evToEbitda: true,
-        evToRevenue: true,
-        pbRatio: true,
-        psRatio: true,
-        fcfYield: true,
-        targetPrice: true,
-        priceUpdatedAt: true,
-      },
+      take: limit + 1,
+      ...(useOffset
+        ? { skip: offset }
+        : cursor
+          ? { cursor: { id: cursor }, skip: 1 }
+          : {}),
+      select: SCREENER_SELECT,
     }),
   ]);
 

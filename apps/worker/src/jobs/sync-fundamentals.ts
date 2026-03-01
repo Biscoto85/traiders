@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { EODHDClient } from "@stock-screener/eodhd-client";
 
-const BATCH_LIMIT = 300; // max stocks per run (rate limit friendly)
+const BATCH_LIMIT = 1500; // max stocks per run
 const STALE_DAYS = 7;
 
 /**

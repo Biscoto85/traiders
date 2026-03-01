@@ -110,7 +110,9 @@ export const screenerRequestSchema = z.object({
   filters: screenerFiltersSchema,
   sort: screenerSortSchema.optional(),
   cursor: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
   limit: z.number().int().min(1).max(200).default(50),
+  tickerStartsWith: z.string().max(1).regex(/^[A-Z]$/i).optional(),
 });
 
 // ─── Stock params ───────────────────────────────────────

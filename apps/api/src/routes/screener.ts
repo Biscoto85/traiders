@@ -23,7 +23,7 @@ export async function screenerRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    const { filters, sort, cursor, limit } = parsed.data;
+    const { filters, sort, cursor, limit, offset, tickerStartsWith } = parsed.data;
 
     try {
       const result = await executeScreenerQuery(
@@ -32,6 +32,8 @@ export async function screenerRoutes(fastify: FastifyInstance): Promise<void> {
         sort,
         cursor,
         limit,
+        offset,
+        tickerStartsWith,
       );
 
       return reply.send({

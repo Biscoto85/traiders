@@ -277,7 +277,9 @@ export interface ScreenerRequest {
   filters: Record<string, unknown>;
   sort?: { field: string; direction: "asc" | "desc" };
   cursor?: string;
+  offset?: number;
   limit?: number;
+  tickerStartsWith?: string;
 }
 
 export interface ScreenerApiResponse {
