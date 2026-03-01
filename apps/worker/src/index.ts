@@ -125,7 +125,10 @@ async function main() {
   }
 
   // ── Poll for manual sync triggers (every 15s) ──
+  let manualSyncRunning = false;
+
   const pollInterval = setInterval(async () => {
+    if (manualSyncRunning) return;
     try {
       const pending = await prisma.systemConfig.findUnique({
         where: { key: "PENDING_SYNC" },
@@ -135,6 +138,7 @@ async function main() {
       const jobName = pending.value;
       await prisma.systemConfig.delete({ where: { key: "PENDING_SYNC" } });
 
+      manualSyncRunning = true;
       console.log(`[manual-trigger] Running ${jobName}...`);
 
       switch (jobName) {
@@ -154,6 +158,8 @@ async function main() {
       console.log(`[manual-trigger] ${jobName} complete`);
     } catch (err) {
       console.error("[manual-trigger] Error:", err);
+    } finally {
+      manualSyncRunning = false;
     }
   }, 15_000);
 

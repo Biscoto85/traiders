@@ -183,11 +183,30 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     const jobs = await fastify.prisma.syncJob.findMany({
       orderBy: { updatedAt: "desc" },
     });
-    // Include pending trigger info
     const pending = await fastify.prisma.systemConfig.findUnique({
       where: { key: "PENDING_SYNC" },
     });
-    return reply.send({ success: true, data: jobs, pendingSync: pending?.value ?? null });
+    const pendingSync = pending?.value ?? null;
+
+    // Derive status & details from raw fields for the frontend
+    const enriched = jobs.map((job) => ({
+      jobName: job.jobName,
+      lastRunAt: job.lastRunAt?.toISOString() ?? null,
+      updatedAt: job.updatedAt.toISOString(),
+      status: pendingSync === job.jobName
+        ? "pending"
+        : job.lastError
+          ? "error"
+          : job.lastSuccessAt
+            ? "success"
+            : "unknown",
+      details: job.lastError
+        ?? (job.tickersProcessed
+          ? `${job.tickersProcessed} tickers en ${((job.durationMs ?? 0) / 1000).toFixed(0)}s`
+          : null),
+    }));
+
+    return reply.send({ success: true, data: enriched, pendingSync });
   });
 
   /**
@@ -205,17 +224,6 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(400).send({
           success: false,
           error: { code: "VALIDATION_ERROR", message: `Job invalide. Valides: ${VALID_SYNC_JOBS.join(", ")}` },
-        });
-      }
-
-      // Check if a sync is already running
-      const running = await fastify.prisma.syncJob.findFirst({
-        where: { status: "running" },
-      });
-      if (running) {
-        return reply.status(409).send({
-          success: false,
-          error: { code: "CONFLICT", message: `Le job "${running.jobName}" est deja en cours d'execution` },
         });
       }
 

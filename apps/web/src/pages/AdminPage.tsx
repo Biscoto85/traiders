@@ -364,7 +364,7 @@ function SyncTab() {
 
   // Auto-refresh while a sync is running or pending
   useEffect(() => {
-    const hasRunningOrPending = pendingSync || jobs.some((j) => j.status === "running");
+    const hasRunningOrPending = !!pendingSync || jobs.some((j) => j.status === "running" || j.status === "pending");
     if (!hasRunningOrPending) return;
     const interval = setInterval(loadJobs, 5_000);
     return () => clearInterval(interval);
