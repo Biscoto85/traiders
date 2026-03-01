@@ -183,8 +183,63 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     const jobs = await fastify.prisma.syncJob.findMany({
       orderBy: { updatedAt: "desc" },
     });
-    return reply.send({ success: true, data: jobs });
+    // Include pending trigger info
+    const pending = await fastify.prisma.systemConfig.findUnique({
+      where: { key: "PENDING_SYNC" },
+    });
+    return reply.send({ success: true, data: jobs, pendingSync: pending?.value ?? null });
   });
+
+  /**
+   * POST /admin/sync-trigger/:jobName — Request a manual sync
+   * The worker polls for PENDING_SYNC and executes it.
+   */
+  const VALID_SYNC_JOBS = ["sync-eod", "sync-tickers", "sync-fundamentals"] as const;
+
+  fastify.post<{ Params: { jobName: string } }>(
+    "/admin/sync-trigger/:jobName",
+    async (request, reply) => {
+      const { jobName } = request.params;
+
+      if (!VALID_SYNC_JOBS.includes(jobName as (typeof VALID_SYNC_JOBS)[number])) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: `Job invalide. Valides: ${VALID_SYNC_JOBS.join(", ")}` },
+        });
+      }
+
+      // Check if a sync is already running
+      const running = await fastify.prisma.syncJob.findFirst({
+        where: { status: "running" },
+      });
+      if (running) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: "CONFLICT", message: `Le job "${running.jobName}" est deja en cours d'execution` },
+        });
+      }
+
+      // Check if a trigger is already pending
+      const existing = await fastify.prisma.systemConfig.findUnique({
+        where: { key: "PENDING_SYNC" },
+      });
+      if (existing) {
+        return reply.status(409).send({
+          success: false,
+          error: { code: "CONFLICT", message: `Un sync "${existing.value}" est deja en attente` },
+        });
+      }
+
+      // Set the trigger for the worker to pick up
+      await fastify.prisma.systemConfig.upsert({
+        where: { key: "PENDING_SYNC" },
+        create: { key: "PENDING_SYNC", value: jobName },
+        update: { value: jobName },
+      });
+
+      return reply.send({ success: true, data: { message: `Sync "${jobName}" demandee`, jobName } });
+    },
+  );
 
   // ── System Configuration ──────────────────────────────────
 

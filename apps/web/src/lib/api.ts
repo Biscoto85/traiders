@@ -161,7 +161,12 @@ export const api = {
     request<{ success: true; data: null }>(`/admin/users/${id}`, { method: "DELETE" }),
 
   adminSyncStatus: () =>
-    request<{ success: true; data: SyncJob[] }>("/admin/sync-status"),
+    request<{ success: true; data: SyncJob[]; pendingSync: string | null }>("/admin/sync-status"),
+
+  adminTriggerSync: (jobName: string) =>
+    request<{ success: true; data: { message: string; jobName: string } }>(`/admin/sync-trigger/${jobName}`, {
+      method: "POST",
+    }),
 
   // Admin config
   adminGetConfig: () =>

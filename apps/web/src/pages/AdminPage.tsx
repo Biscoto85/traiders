@@ -342,24 +342,60 @@ function UsersTab({ currentUserId }: { currentUserId: string }) {
 
 // ─── Sync Tab ─────────────────────────────────────────────
 
+const SYNC_JOB_LABELS: Record<string, string> = {
+  "sync-eod": "Prix EOD",
+  "sync-tickers": "Tickers",
+  "sync-fundamentals": "Fondamentaux",
+};
+
+const TRIGGERABLE_JOBS = ["sync-eod", "sync-tickers", "sync-fundamentals"];
+
 function SyncTab() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
+  const [pendingSync, setPendingSync] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     loadJobs();
   }, []);
 
+  // Auto-refresh while a sync is running or pending
+  useEffect(() => {
+    const hasRunningOrPending = pendingSync || jobs.some((j) => j.status === "running");
+    if (!hasRunningOrPending) return;
+    const interval = setInterval(loadJobs, 5_000);
+    return () => clearInterval(interval);
+  }, [jobs, pendingSync]);
+
   async function loadJobs() {
-    setLoading(true);
     try {
       const res = await api.adminSyncStatus();
       setJobs(res.data);
+      setPendingSync(res.pendingSync);
+      if (!loading) return; // don't clear loading on refreshes
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleTrigger(jobName: string) {
+    setTriggering(jobName);
+    setMessage(null);
+    try {
+      const res = await api.adminTriggerSync(jobName);
+      setMessage({ text: res.data.message, type: "success" });
+      setPendingSync(jobName);
+      // Refresh after a short delay
+      setTimeout(loadJobs, 2_000);
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Erreur", type: "error" });
+    } finally {
+      setTriggering(null);
     }
   }
 
@@ -387,55 +423,98 @@ function SyncTab() {
     }
   }
 
+  const isAnySyncBusy = !!pendingSync || !!triggering || jobs.some((j) => j.status === "running");
+
   if (loading) return <div className="loading">Chargement...</div>;
   if (error) return <div className="auth-error">{error}</div>;
 
-  if (jobs.length === 0) {
-    return (
-      <div className="card" style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
-        Aucun job de synchronisation execute. Le worker doit etre lance pour que les syncs se declenchent.
-      </div>
-    );
-  }
-
   return (
-    <div className="card" style={{ padding: 0, overflow: "auto" }}>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Job</th>
-            <th>Statut</th>
-            <th>Derniere execution</th>
-            <th>Details</th>
-            <th>Mis a jour</th>
-          </tr>
-        </thead>
-        <tbody>
-          {jobs.map((job) => (
-            <tr key={job.jobName}>
-              <td><strong>{job.jobName}</strong></td>
-              <td>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    padding: "0.125rem 0.5rem",
-                    borderRadius: "0.25rem",
-                    background: statusColor(job.status),
-                    color: "white",
-                  }}
-                >
-                  {job.status}
-                </span>
-              </td>
-              <td>{formatDate(job.lastRunAt)}</td>
-              <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {job.details ?? "—"}
-              </td>
-              <td>{formatDate(job.updatedAt)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div>
+      {/* Manual trigger section */}
+      <div className="card" style={{ padding: "1.25rem", marginBottom: "1.5rem" }}>
+        <h3 style={{ marginBottom: "0.25rem" }}>Lancer une synchronisation</h3>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: "1rem" }}>
+          Declencher manuellement un job de sync. Le worker l'executera sous 15 secondes.
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {TRIGGERABLE_JOBS.map((jobName) => {
+            const isPending = pendingSync === jobName;
+            const isRunning = jobs.find((j) => j.jobName === jobName)?.status === "running";
+            const isThisTriggering = triggering === jobName;
+
+            let label = SYNC_JOB_LABELS[jobName] ?? jobName;
+            if (isThisTriggering) label = "Envoi...";
+            else if (isPending) label = `${SYNC_JOB_LABELS[jobName]} (en attente)`;
+            else if (isRunning) label = `${SYNC_JOB_LABELS[jobName]} (en cours)`;
+
+            return (
+              <button
+                key={jobName}
+                className="btn btn-ghost"
+                style={{
+                  borderColor: isPending || isRunning ? "var(--warning)" : undefined,
+                  color: isPending || isRunning ? "var(--warning)" : undefined,
+                }}
+                disabled={isAnySyncBusy}
+                onClick={() => handleTrigger(jobName)}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {message && (
+          <div style={{ marginTop: "0.75rem", fontSize: "0.875rem", color: message.type === "success" ? "var(--success)" : "var(--danger)" }}>
+            {message.text}
+          </div>
+        )}
+      </div>
+
+      {/* Jobs status table */}
+      {jobs.length === 0 ? (
+        <div className="card" style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
+          Aucun job de synchronisation execute. Le worker doit etre lance pour que les syncs se declenchent.
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: "auto" }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Statut</th>
+                <th>Derniere execution</th>
+                <th>Details</th>
+                <th>Mis a jour</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.jobName}>
+                  <td><strong>{job.jobName}</strong></td>
+                  <td>
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        padding: "0.125rem 0.5rem",
+                        borderRadius: "0.25rem",
+                        background: statusColor(job.status),
+                        color: "white",
+                      }}
+                    >
+                      {job.status}
+                    </span>
+                  </td>
+                  <td>{formatDate(job.lastRunAt)}</td>
+                  <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {job.details ?? "—"}
+                  </td>
+                  <td>{formatDate(job.updatedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

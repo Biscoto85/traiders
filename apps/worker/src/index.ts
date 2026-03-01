@@ -124,6 +124,39 @@ async function main() {
     job.start();
   }
 
+  // ── Poll for manual sync triggers (every 15s) ──
+  const pollInterval = setInterval(async () => {
+    try {
+      const pending = await prisma.systemConfig.findUnique({
+        where: { key: "PENDING_SYNC" },
+      });
+      if (!pending) return;
+
+      const jobName = pending.value;
+      await prisma.systemConfig.delete({ where: { key: "PENDING_SYNC" } });
+
+      console.log(`[manual-trigger] Running ${jobName}...`);
+
+      switch (jobName) {
+        case "sync-eod":
+          await runSyncEod(prisma, eodhd, config.exchanges);
+          break;
+        case "sync-tickers":
+          await runSyncTickers(prisma, eodhd, config.exchanges);
+          break;
+        case "sync-fundamentals":
+          await runSyncFundamentals(prisma, eodhd, config.exchanges);
+          break;
+        default:
+          console.warn(`[manual-trigger] Unknown job: ${jobName}`);
+      }
+
+      console.log(`[manual-trigger] ${jobName} complete`);
+    } catch (err) {
+      console.error("[manual-trigger] Error:", err);
+    }
+  }, 15_000);
+
   // ── Run initial sync on first startup ──
   const isFirstRun = !(await prisma.syncJob.findUnique({
     where: { jobName: "sync-tickers" },
@@ -150,6 +183,7 @@ async function main() {
   // ── Graceful shutdown ──
   const shutdown = async () => {
     console.log("Shutting down worker...");
+    clearInterval(pollInterval);
     for (const job of jobs) {
       job.stop();
     }
