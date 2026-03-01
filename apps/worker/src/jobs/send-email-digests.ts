@@ -28,6 +28,7 @@ export async function runEmailDigests(
   prisma: PrismaClient,
   schedule: "daily" | "weekly",
   mailConfig: MailConfig,
+  appUrl = "http://localhost:5173",
 ): Promise<void> {
   const jobName = `email-digest-${schedule}`;
   console.log(`[${jobName}] Starting...`);
@@ -108,11 +109,14 @@ export async function runEmailDigests(
       }
 
       // Build HTML email
+      const stockUrl = (ticker: string, exId: string) =>
+        `${appUrl}/stock/${encodeURIComponent(ticker)}?exchange=${encodeURIComponent(exId)}`;
+
       const rows = stocks
         .map(
           (s) => `
           <tr>
-            <td style="padding:4px 8px;font-weight:bold">${s.ticker}.${s.exchangeId}</td>
+            <td style="padding:4px 8px"><a href="${stockUrl(s.ticker, s.exchangeId)}" style="color:#6366f1;font-weight:bold;text-decoration:none">${s.ticker}.${s.exchangeId}</a></td>
             <td style="padding:4px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${s.name}</td>
             <td style="padding:4px 8px;text-align:right">${s.lastPrice?.toFixed(2) ?? "—"}</td>
             <td style="padding:4px 8px;text-align:right">${formatMarketCap(s.marketCap)}</td>
@@ -145,7 +149,10 @@ export async function runEmailDigests(
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <p style="color:#999;font-size:12px;margin-top:20px">Genere par Traiders le ${new Date().toLocaleDateString("fr-FR")}</p>
+          <div style="margin-top:20px;text-align:center">
+            <a href="${appUrl}" style="display:inline-block;padding:10px 24px;background:#6366f1;color:white;border-radius:6px;text-decoration:none;font-weight:bold">Ouvrir Traiders</a>
+          </div>
+          <p style="color:#999;font-size:12px;margin-top:20px;text-align:center">Genere par Traiders le ${new Date().toLocaleDateString("fr-FR")} &middot; Cliquez sur un ticker pour voir le detail</p>
         </div>
       `;
 

@@ -10,6 +10,7 @@ import { stockRoutes } from "./routes/stocks.js";
 import { screenerRoutes } from "./routes/screener.js";
 import { presetRoutes } from "./routes/presets.js";
 import { adminRoutes } from "./routes/admin.js";
+import { emailDigestRoutes } from "./routes/email-digests.js";
 
 async function main() {
   const fastify = Fastify({
@@ -40,6 +41,7 @@ async function main() {
     await instance.register(stockRoutes, { prefix: "/api/v1" });
     await instance.register(screenerRoutes, { prefix: "/api/v1" });
     await instance.register(presetRoutes, { prefix: "/api/v1" });
+    await instance.register(emailDigestRoutes, { prefix: "/api/v1" });
     await instance.register(adminRoutes, { prefix: "/api/v1" });
   });
 

@@ -32,6 +32,8 @@ export const config = {
   /** Exchanges to sync. Add more as needed. */
   exchanges: optionalEnv("SYNC_EXCHANGES", "US").split(","),
 
+  appUrl: optionalEnv("WEB_URL", "http://localhost:5173"),
+
   smtp: {
     host: optionalEnv("SMTP_HOST", ""),
     port: parseInt(optionalEnv("SMTP_PORT", "587"), 10),

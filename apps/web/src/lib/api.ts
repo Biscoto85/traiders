@@ -87,9 +87,46 @@ export const api = {
     );
   },
 
+  fundamentals: (ticker: string, query?: { type?: string; limit?: number; exchange?: string }) => {
+    const params = new URLSearchParams();
+    if (query?.type) params.set("type", query.type);
+    if (query?.limit) params.set("limit", String(query.limit));
+    if (query?.exchange) params.set("exchange", query.exchange);
+    const qs = params.toString();
+    return request<{ success: true; data: FundamentalPeriod[] }>(
+      `/stocks/${ticker}/fundamentals${qs ? `?${qs}` : ""}`,
+    );
+  },
+
   // Filters
   filterOptions: () =>
     request<{ success: true; data: FilterOptions }>("/filters/options"),
+
+  // Presets
+  presets: () =>
+    request<{ success: true; data: Preset[] }>("/presets"),
+
+  createPreset: (body: { name: string; filters: Record<string, unknown>; sort?: Record<string, unknown>; isPublic?: boolean }) =>
+    request<{ success: true; data: Preset }>("/presets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deletePreset: (id: string) =>
+    request<{ success: true; data: null }>(`/presets/${id}`, { method: "DELETE" }),
+
+  // Email digests
+  emailDigests: () =>
+    request<{ success: true; data: EmailDigest[] }>("/email-digests"),
+
+  createEmailDigest: (body: { name: string; filters: Record<string, unknown>; schedule?: string }) =>
+    request<{ success: true; data: EmailDigest }>("/email-digests", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  deleteEmailDigest: (id: string) =>
+    request<{ success: true; data: null }>(`/email-digests/${id}`, { method: "DELETE" }),
 };
 
 // ─── Types ──────────────────────────────────────────────
@@ -125,13 +162,29 @@ export interface StockDetail extends StockSummary {
   forwardPe: number | null;
   pegRatio: number | null;
   eps: number | null;
+  dilutedEps: number | null;
+  earningsGrowth: number | null;
   grossMargin: number | null;
   operatingMargin: number | null;
   netMargin: number | null;
   roe: number | null;
+  roa: number | null;
   debtToEquity: number | null;
+  currentRatio: number | null;
   evToEbitda: number | null;
+  evToRevenue: number | null;
   pbRatio: number | null;
+  psRatio: number | null;
+  enterpriseValue: number | null;
+  ebitda: number | null;
+  freeCashFlow: number | null;
+  fcfYield: number | null;
+  targetPrice: number | null;
+  pctInsiders: number | null;
+  pctInstitutions: number | null;
+  shortPctFloat: number | null;
+  pctFrom52WeekHigh: number | null;
+  pctFrom52WeekLow: number | null;
 }
 
 export interface PriceBar {
@@ -142,6 +195,24 @@ export interface PriceBar {
   close: number;
   adjClose: number;
   volume: string;
+}
+
+export interface FundamentalPeriod {
+  id: string;
+  period: string;
+  type: string;
+  date: string;
+  revenue: number | null;
+  grossProfit: number | null;
+  operatingIncome: number | null;
+  netIncome: number | null;
+  ebitda: number | null;
+  totalAssets: number | null;
+  totalDebt: number | null;
+  totalEquity: number | null;
+  cashAndEquiv: number | null;
+  operatingCF: number | null;
+  freeCashFlow: number | null;
 }
 
 export interface FilterOptions {
@@ -167,4 +238,25 @@ export interface ScreenerApiResponse {
     limit: number;
   };
   appliedFilters: Record<string, unknown>;
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  sort: Record<string, unknown> | null;
+  isPublic: boolean;
+  userId: string;
+  user?: { name: string };
+  createdAt: string;
+}
+
+export interface EmailDigest {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  schedule: string;
+  isActive: boolean;
+  lastSentAt: string | null;
+  createdAt: string;
 }

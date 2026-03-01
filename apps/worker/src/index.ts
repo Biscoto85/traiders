@@ -80,7 +80,7 @@ async function main() {
     const weeklyDigestJob = CronJob.from({
       cronTime: config.cron.emailDigestWeekly,
       onTick: () => {
-        runEmailDigests(prisma, "weekly", mailConfig).catch((err) =>
+        runEmailDigests(prisma, "weekly", mailConfig, config.appUrl).catch((err) =>
           console.error("Weekly email digest cron error:", err),
         );
       },
