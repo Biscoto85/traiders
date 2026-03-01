@@ -1,0 +1,66 @@
+# docker-compose.prod.yml — Production avec Neon DB (pas de postgres local)
+#
+# Usage :
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Le port 3080 est expose cote host. Ton reverse proxy principal (nginx/caddy
+# de pairsform ou du VPS) redirige traiders.xxx.com vers localhost:3080.
+
+services:
+  # ── API (Fastify) ──
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      EODHD_API_KEY: ${EODHD_API_KEY}
+      EODHD_BASE_URL: ${EODHD_BASE_URL:-https://eodhd.com/api}
+      API_PORT: "4000"
+      API_HOST: "0.0.0.0"
+      NODE_ENV: production
+      WEB_URL: ${WEB_URL:-https://traiders.xxx.com}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET}
+    expose:
+      - "4000"
+
+  # ── Worker (Cron sync) ──
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      EODHD_API_KEY: ${EODHD_API_KEY}
+      EODHD_BASE_URL: ${EODHD_BASE_URL:-https://eodhd.com/api}
+      SYNC_EOD_CRON: ${SYNC_EOD_CRON:-"0 22 * * 1-5"}
+      SYNC_FUNDAMENTALS_CRON: ${SYNC_FUNDAMENTALS_CRON:-"0 6 * * 6"}
+      SYNC_TICKERS_CRON: ${SYNC_TICKERS_CRON:-"0 3 1 * *"}
+      SYNC_EXCHANGES: ${SYNC_EXCHANGES:-US}
+      WEB_URL: ${WEB_URL:-https://traiders.xxx.com}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-traiders@example.com}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+
+  # ── Nginx (frontend + reverse proxy API) ──
+  # Le Dockerfile.web produit une image nginx avec le frontend build
+  # On monte la config nginx par-dessus
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3080:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
