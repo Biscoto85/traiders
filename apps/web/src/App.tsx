@@ -1,9 +1,12 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, NavLink } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import ScreenerPage from "@/pages/ScreenerPage";
 import StockDetailPage from "@/pages/StockDetailPage";
+import PresetsPage from "@/pages/PresetsPage";
+import EmailDigestsPage from "@/pages/EmailDigestsPage";
+import AdminPage from "@/pages/AdminPage";
 import type { ReactNode } from "react";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -20,9 +23,29 @@ function AppLayout() {
   return (
     <div className="app-layout">
       <header className="app-header">
-        <Link to="/" style={{ textDecoration: "none", color: "inherit" }}>
-          <h1>Traiders</h1>
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
+          <NavLink to="/" style={{ textDecoration: "none", color: "inherit" }}>
+            <h1>Traiders</h1>
+          </NavLink>
+          {user && (
+            <nav className="app-nav">
+              <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+                Screener
+              </NavLink>
+              <NavLink to="/presets" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+                Presets
+              </NavLink>
+              <NavLink to="/email-digests" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+                Alertes
+              </NavLink>
+              {user.role === "super_admin" && (
+                <NavLink to="/admin" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+                  Admin
+                </NavLink>
+              )}
+            </nav>
+          )}
+        </div>
         {user && (
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <span style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
@@ -60,6 +83,9 @@ export default function App() {
           >
             <Route path="/" element={<ScreenerPage />} />
             <Route path="/stock/:ticker" element={<StockDetailPage />} />
+            <Route path="/presets" element={<PresetsPage />} />
+            <Route path="/email-digests" element={<EmailDigestsPage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Route>
         </Routes>
       </AuthProvider>

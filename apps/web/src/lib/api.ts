@@ -125,8 +125,43 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  updateEmailDigest: (id: string, body: { name?: string; filters?: Record<string, unknown>; schedule?: string; isActive?: boolean }) =>
+    request<{ success: true; data: EmailDigest }>(`/email-digests/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
   deleteEmailDigest: (id: string) =>
     request<{ success: true; data: null }>(`/email-digests/${id}`, { method: "DELETE" }),
+
+  // Presets update
+  updatePreset: (id: string, body: { name?: string; filters?: Record<string, unknown>; sort?: Record<string, unknown>; isPublic?: boolean }) =>
+    request<{ success: true; data: Preset }>(`/presets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  // Admin
+  adminUsers: () =>
+    request<{ success: true; data: AdminUser[] }>("/admin/users"),
+
+  adminCreateUser: (body: { email: string; password: string; name: string; role?: string }) =>
+    request<{ success: true; data: AdminUser }>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  adminUpdateUser: (id: string, body: { name?: string; role?: string; isActive?: boolean; password?: string }) =>
+    request<{ success: true; data: AdminUser }>(`/admin/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  adminDeleteUser: (id: string) =>
+    request<{ success: true; data: null }>(`/admin/users/${id}`, { method: "DELETE" }),
+
+  adminSyncStatus: () =>
+    request<{ success: true; data: SyncJob[] }>("/admin/sync-status"),
 };
 
 // ─── Types ──────────────────────────────────────────────
@@ -259,4 +294,23 @@ export interface EmailDigest {
   isActive: boolean;
   lastSentAt: string | null;
   createdAt: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count: { presets: number; emailDigests: number };
+}
+
+export interface SyncJob {
+  jobName: string;
+  lastRunAt: string | null;
+  status: string;
+  details: string | null;
+  updatedAt: string;
 }
