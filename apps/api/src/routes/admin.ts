@@ -185,4 +185,70 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     });
     return reply.send({ success: true, data: jobs });
   });
+
+  // ── System Configuration ──────────────────────────────────
+
+  /**
+   * GET /admin/config — Read all system config entries
+   */
+  fastify.get("/admin/config", async (_request, reply) => {
+    const rows = await fastify.prisma.systemConfig.findMany();
+    const config: Record<string, string> = {};
+    for (const row of rows) {
+      config[row.key] = row.value;
+    }
+    // Ensure SYNC_MODE always has a value
+    if (!config.SYNC_MODE) {
+      config.SYNC_MODE = process.env.SYNC_MODE ?? "daily";
+    }
+    return reply.send({ success: true, data: config });
+  });
+
+  const updateConfigSchema = z.object({
+    key: z.string().min(1),
+    value: z.string().min(1),
+  });
+
+  /** Allowed config keys and their valid values */
+  const CONFIG_RULES: Record<string, string[]> = {
+    SYNC_MODE: ["daily", "full"],
+  };
+
+  /**
+   * PUT /admin/config — Upsert a single config key/value
+   */
+  fastify.put<{ Body: unknown }>("/admin/config", async (request, reply) => {
+    const parsed = updateConfigSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "Invalid config data" },
+      });
+    }
+
+    const { key, value } = parsed.data;
+
+    // Validate against allowed keys
+    const allowedValues = CONFIG_RULES[key];
+    if (!allowedValues) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: `Unknown config key: ${key}` },
+      });
+    }
+    if (!allowedValues.includes(value)) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: `Invalid value for ${key}. Allowed: ${allowedValues.join(", ")}` },
+      });
+    }
+
+    const row = await fastify.prisma.systemConfig.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value },
+    });
+
+    return reply.send({ success: true, data: row });
+  });
 }

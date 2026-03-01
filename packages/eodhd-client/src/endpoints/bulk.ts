@@ -1,5 +1,10 @@
 import type { EODHDClient } from "../client.js";
 
+// ─── EODHD Plan Requirements ────────────────────────────
+// Bulk EOD (/eod-bulk-last-day): All World ($19.99), All-in-One ($99.99)
+// NOT available in: Fundamentals Data Feed
+// ─────────────────────────────────────────────────────────
+
 // ─── EODHD Raw Response Types ───────────────────────────
 
 export interface EODHDBulkEodItem {

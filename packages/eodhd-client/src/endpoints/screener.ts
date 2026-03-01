@@ -1,5 +1,11 @@
 import type { EODHDClient } from "../client.js";
 
+// ─── EODHD Plan Requirements ────────────────────────────
+// Screener (/screener): EOD+Intraday Extended ($29.99), All-in-One ($99.99)
+// NOT available in: All World, Fundamentals Data Feed
+// Each request costs 5 API calls.
+// ─────────────────────────────────────────────────────────
+
 // ─── EODHD Raw Response Types ───────────────────────────
 
 export interface EODHDScreenerResult {

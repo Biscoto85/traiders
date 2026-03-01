@@ -1,5 +1,11 @@
 import type { EODHDClient } from "../client.js";
 
+// ─── EODHD Plan Requirements ────────────────────────────
+// Fundamentals (/fundamentals): Fundamentals ($59.99), All-in-One ($99.99)
+// NOT available in: All World
+// Each request costs 10 API calls.
+// ─────────────────────────────────────────────────────────
+
 // ─── EODHD Raw Response Types ───────────────────────────
 
 export interface EODHDFundamentals {

@@ -1,5 +1,11 @@
 import type { EODHDClient } from "../client.js";
 
+// ─── EODHD Plan Requirements ────────────────────────────
+// EOD History (/eod): All World ($19.99), All-in-One ($99.99)
+// Exchange Symbol List (/exchange-symbol-list): All plans including Free
+// Exchanges List (/exchanges-list): All plans including Free
+// ─────────────────────────────────────────────────────────
+
 // ─── EODHD Raw Response Types ───────────────────────────
 
 export interface EODHDEodBar {

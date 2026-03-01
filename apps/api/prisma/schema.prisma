@@ -230,3 +230,27 @@ model SyncJob {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
+
+// ─── System Configuration (key-value) ───────────────────
+//
+// EODHD Plan Strategy:
+// ┌─────────────────────────────────────────────────────────────────┐
+// │  SYNC_MODE=daily  → All World plan ($19.99/mo)                 │
+// │    - sync-eod       (Bulk EOD)           ✓ runs daily M-F      │
+// │    - sync-tickers   (Exchange symbols)   ✓ runs monthly        │
+// │    - sync-fundament (Fundamentals)       ✗ SKIPPED             │
+// │                                                                │
+// │  SYNC_MODE=full    → All-in-One plan ($99.99/mo)               │
+// │    - sync-eod       (Bulk EOD)           ✓ runs daily M-F      │
+// │    - sync-tickers   (Exchange symbols)   ✓ runs monthly        │
+// │    - sync-fundament (Fundamentals)       ✓ runs weekly Sat     │
+// └─────────────────────────────────────────────────────────────────┘
+//
+// Switch to "full" for 1 month each quarter to refresh fundamentals.
+// Annual cost: 8×$19.99 + 4×$99.99 = ~$560 vs $1000 All-in-One/yr.
+
+model SystemConfig {
+  key       String   @id // "SYNC_MODE", etc.
+  value     String
+  updatedAt DateTime @updatedAt
+}

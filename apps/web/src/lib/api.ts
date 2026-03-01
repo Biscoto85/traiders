@@ -162,6 +162,16 @@ export const api = {
 
   adminSyncStatus: () =>
     request<{ success: true; data: SyncJob[] }>("/admin/sync-status"),
+
+  // Admin config
+  adminGetConfig: () =>
+    request<{ success: true; data: Record<string, string> }>("/admin/config"),
+
+  adminUpdateConfig: (key: string, value: string) =>
+    request<{ success: true; data: { key: string; value: string; updatedAt: string } }>("/admin/config", {
+      method: "PUT",
+      body: JSON.stringify({ key, value }),
+    }),
 };
 
 // ─── Types ──────────────────────────────────────────────

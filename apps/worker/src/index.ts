@@ -1,11 +1,29 @@
 import { PrismaClient } from "@prisma/client";
 import { CronJob } from "cron";
 import { EODHDClient } from "@stock-screener/eodhd-client";
-import { config } from "./config.js";
+import { config, type SyncMode } from "./config.js";
 import { runSyncEod } from "./jobs/sync-eod.js";
 import { runSyncFundamentals } from "./jobs/sync-fundamentals.js";
 import { runSyncTickers } from "./jobs/sync-tickers.js";
 import { runEmailDigests } from "./jobs/send-email-digests.js";
+
+/**
+ * Read the current SYNC_MODE from the DB (SystemConfig table).
+ * Falls back to the env-based default if no DB entry exists.
+ */
+async function getSyncMode(prisma: PrismaClient): Promise<SyncMode> {
+  try {
+    const row = await prisma.systemConfig.findUnique({
+      where: { key: "SYNC_MODE" },
+    });
+    if (row && (row.value === "daily" || row.value === "full")) {
+      return row.value;
+    }
+  } catch {
+    // Table may not exist yet (pre-migration) — fall back silently
+  }
+  return config.defaultSyncMode;
+}
 
 async function main() {
   console.log("Traiders Worker starting...");
@@ -18,6 +36,9 @@ async function main() {
   await prisma.$connect();
   console.log("Database connected");
 
+  const syncMode = await getSyncMode(prisma);
+  console.log(`Sync mode: ${syncMode} (${syncMode === "full" ? "All-in-One plan — fundamentals enabled" : "All World plan — fundamentals skipped"})`);
+
   const eodhd = new EODHDClient({
     apiKey: config.eodhd.apiKey,
     baseUrl: config.eodhd.baseUrl,
@@ -27,7 +48,7 @@ async function main() {
 
   const jobs: CronJob[] = [];
 
-  // EOD prices: weekdays after market close
+  // EOD prices: weekdays after market close (All World plan — always active)
   const eodJob = CronJob.from({
     cronTime: config.cron.syncEod,
     onTick: () => {
@@ -40,10 +61,16 @@ async function main() {
   jobs.push(eodJob);
   console.log(`EOD sync scheduled: ${config.cron.syncEod}`);
 
-  // Fundamentals: weekly
+  // Fundamentals: weekly — only in "full" mode (All-in-One plan)
+  // Re-checks SYNC_MODE from DB on each tick so admin can toggle without restart.
   const fundamentalsJob = CronJob.from({
     cronTime: config.cron.syncFundamentals,
-    onTick: () => {
+    onTick: async () => {
+      const currentMode = await getSyncMode(prisma);
+      if (currentMode !== "full") {
+        console.log("[sync-fundamentals] Skipped — SYNC_MODE is 'daily'. Switch to 'full' (All-in-One plan) to enable.");
+        return;
+      }
       runSyncFundamentals(prisma, eodhd, config.exchanges).catch((err) =>
         console.error("Fundamentals sync cron error:", err),
       );
@@ -51,9 +78,9 @@ async function main() {
     timeZone: "America/New_York",
   });
   jobs.push(fundamentalsJob);
-  console.log(`Fundamentals sync scheduled: ${config.cron.syncFundamentals}`);
+  console.log(`Fundamentals sync scheduled: ${config.cron.syncFundamentals} (${syncMode === "full" ? "active" : "skipped in daily mode"})`);
 
-  // Tickers: monthly
+  // Tickers: monthly (All World plan — always active)
   const tickersJob = CronJob.from({
     cronTime: config.cron.syncTickers,
     onTick: () => {
@@ -103,13 +130,18 @@ async function main() {
   }));
 
   if (isFirstRun) {
+    const initialMode = await getSyncMode(prisma);
     console.log("First run detected — starting initial data sync...");
     console.log("Step 1/3: Syncing ticker lists...");
     await runSyncTickers(prisma, eodhd, config.exchanges);
     console.log("Step 2/3: Syncing EOD prices...");
     await runSyncEod(prisma, eodhd, config.exchanges);
-    console.log("Step 3/3: Syncing fundamentals (this may take a while)...");
-    await runSyncFundamentals(prisma, eodhd, config.exchanges);
+    if (initialMode === "full") {
+      console.log("Step 3/3: Syncing fundamentals (this may take a while)...");
+      await runSyncFundamentals(prisma, eodhd, config.exchanges);
+    } else {
+      console.log("Step 3/3: Fundamentals skipped (SYNC_MODE=daily). Switch to 'full' from admin to enable.");
+    }
     console.log("Initial sync complete!");
   }
 

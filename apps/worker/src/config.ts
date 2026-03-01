@@ -12,6 +12,22 @@ function optionalEnv(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
+/**
+ * SYNC_MODE controls which EODHD endpoints are used:
+ *
+ *  "daily" → All World plan ($19.99/mo)
+ *    - sync-eod (Bulk EOD) + sync-tickers (Exchange lists) only
+ *    - sync-fundamentals is SKIPPED
+ *
+ *  "full"  → All-in-One plan ($99.99/mo)
+ *    - All syncs enabled, including fundamentals
+ *
+ * The mode can be overridden at runtime via the SystemConfig DB table
+ * (key: "SYNC_MODE"), changeable from the admin UI.
+ * Env var is used as fallback when no DB entry exists.
+ */
+export type SyncMode = "daily" | "full";
+
 export const config = {
   db: {
     url: requireEnv("DATABASE_URL"),
@@ -21,6 +37,9 @@ export const config = {
     apiKey: requireEnv("EODHD_API_KEY"),
     baseUrl: optionalEnv("EODHD_BASE_URL", "https://eodhd.com/api"),
   },
+
+  /** Default sync mode from env. Overridden by DB SystemConfig at runtime. */
+  defaultSyncMode: (optionalEnv("SYNC_MODE", "daily") as SyncMode),
 
   cron: {
     syncEod: optionalEnv("SYNC_EOD_CRON", "0 22 * * 1-5"),

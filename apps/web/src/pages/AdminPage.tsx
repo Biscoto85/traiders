@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { api, type AdminUser, type SyncJob } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
-type Tab = "users" | "sync";
+type Tab = "users" | "sync" | "config";
 
 export default function AdminPage() {
   const { user: currentUser } = useAuth();
@@ -33,10 +33,17 @@ export default function AdminPage() {
         >
           Statut des syncs
         </button>
+        <button
+          className={tab === "config" ? "btn btn-primary" : "btn btn-ghost"}
+          onClick={() => setTab("config")}
+        >
+          Configuration
+        </button>
       </div>
 
       {tab === "users" && <UsersTab currentUserId={currentUser.id} />}
       {tab === "sync" && <SyncTab />}
+      {tab === "config" && <ConfigTab />}
     </div>
   );
 }
@@ -429,6 +436,184 @@ function SyncTab() {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ─── Config Tab ──────────────────────────────────────────
+
+const SYNC_MODE_INFO = {
+  daily: {
+    plan: "All World ($19.99/mois)",
+    label: "Quotidien",
+    desc: "EOD prices + tickers uniquement. Les fondamentaux ne sont pas synchronises.",
+    color: "var(--warning)",
+  },
+  full: {
+    plan: "All-in-One ($99.99/mois)",
+    label: "Complet",
+    desc: "Tous les syncs actifs, y compris les fondamentaux hebdomadaires.",
+    color: "var(--success)",
+  },
+} as const;
+
+function ConfigTab() {
+  const [config, setConfig] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  async function loadConfig() {
+    setLoading(true);
+    try {
+      const res = await api.adminGetConfig();
+      setConfig(res.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleModeChange(newMode: string) {
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      await api.adminUpdateConfig("SYNC_MODE", newMode);
+      setConfig((prev) => ({ ...prev, SYNC_MODE: newMode }));
+      setSuccess(
+        newMode === "full"
+          ? "Mode complet active. Les fondamentaux seront synchronises au prochain cron (samedi 6h)."
+          : "Mode quotidien active. Les fondamentaux ne seront plus synchronises.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div className="loading">Chargement...</div>;
+  if (error && !config.SYNC_MODE) return <div className="auth-error">{error}</div>;
+
+  const currentMode = (config.SYNC_MODE ?? "daily") as keyof typeof SYNC_MODE_INFO;
+  const modeInfo = SYNC_MODE_INFO[currentMode];
+
+  return (
+    <div>
+      {/* Sync Mode Card */}
+      <div className="card" style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
+        <h3 style={{ marginBottom: "0.25rem" }}>Mode de synchronisation EODHD</h3>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
+          Controle quel plan EODHD est utilise. Le token API ne change pas entre les plans.
+        </p>
+
+        {/* Current mode display */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "1rem",
+            borderRadius: "0.5rem",
+            background: "var(--bg-input)",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: modeInfo.color,
+              flexShrink: 0,
+            }}
+          />
+          <div>
+            <div style={{ fontWeight: 600 }}>
+              {modeInfo.label} — {modeInfo.plan}
+            </div>
+            <div style={{ fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+              {modeInfo.desc}
+            </div>
+          </div>
+        </div>
+
+        {/* Toggle buttons */}
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            className={currentMode === "daily" ? "btn btn-primary" : "btn btn-ghost"}
+            disabled={saving || currentMode === "daily"}
+            onClick={() => handleModeChange("daily")}
+          >
+            {saving && currentMode !== "daily" ? "..." : "Quotidien (All World)"}
+          </button>
+          <button
+            className={currentMode === "full" ? "btn btn-primary" : "btn btn-ghost"}
+            disabled={saving || currentMode === "full"}
+            onClick={() => handleModeChange("full")}
+          >
+            {saving && currentMode !== "full" ? "..." : "Complet (All-in-One)"}
+          </button>
+        </div>
+
+        {success && (
+          <div style={{ marginTop: "0.75rem", fontSize: "0.875rem", color: "var(--success)" }}>
+            {success}
+          </div>
+        )}
+        {error && (
+          <div style={{ marginTop: "0.75rem", fontSize: "0.875rem", color: "var(--danger)" }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Plan comparison info */}
+      <div className="card" style={{ padding: "1.25rem" }}>
+        <h4 style={{ marginBottom: "0.75rem" }}>Strategie de cout EODHD</h4>
+        <table className="data-table" style={{ fontSize: "0.8125rem" }}>
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Job</th>
+              <th>Quotidien</th>
+              <th>Complet</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/eod-bulk-last-day</code></td>
+              <td>sync-eod</td>
+              <td style={{ color: "var(--success)" }}>actif</td>
+              <td style={{ color: "var(--success)" }}>actif</td>
+            </tr>
+            <tr>
+              <td><code>/exchange-symbol-list</code></td>
+              <td>sync-tickers</td>
+              <td style={{ color: "var(--success)" }}>actif</td>
+              <td style={{ color: "var(--success)" }}>actif</td>
+            </tr>
+            <tr>
+              <td><code>/fundamentals</code></td>
+              <td>sync-fundamentals</td>
+              <td style={{ color: "var(--danger)" }}>desactive</td>
+              <td style={{ color: "var(--success)" }}>actif</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style={{ marginTop: "0.75rem", fontSize: "0.8125rem", color: "var(--text-muted)" }}>
+          Cout annuel optimise : 8 mois All World ($19.99) + 4 mois All-in-One ($99.99) = ~$560/an
+          au lieu de $1000/an en All-in-One permanent.
+        </p>
+      </div>
     </div>
   );
 }
