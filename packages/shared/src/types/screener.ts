@@ -14,36 +14,49 @@ export interface ScreenerFilters {
   industries?: string[];
   countries?: string[];
 
-  // Valorisation
+  // Valuation
   peRatio?: RangeFilter;
   forwardPe?: RangeFilter;
   pegRatio?: RangeFilter;
   pbRatio?: RangeFilter;
+  psRatio?: RangeFilter;
   evToEbitda?: RangeFilter;
+  evToRevenue?: RangeFilter;
 
-  // Taille
+  // Size & price
   marketCap?: RangeFilter;
   price?: RangeFilter;
+  enterpriseValue?: RangeFilter;
 
-  // Profitabilité
+  // Profitability
   grossMargin?: RangeFilter;
   operatingMargin?: RangeFilter;
   netMargin?: RangeFilter;
   roe?: RangeFilter;
+  roa?: RangeFilter;
 
-  // Croissance
+  // Growth
   revenueGrowth?: RangeFilter;
+  earningsGrowth?: RangeFilter;
 
-  // Dividende
+  // Yield & income
   dividendYield?: RangeFilter;
+  fcfYield?: RangeFilter;
 
-  // Risque
+  // Risk & leverage
   beta?: RangeFilter;
   debtToEquity?: RangeFilter;
+  currentRatio?: RangeFilter;
 
-  // Prix relatif
+  // 52-week relative
   pctFrom52WeekHigh?: RangeFilter;
   pctFrom52WeekLow?: RangeFilter;
+
+  // Analyst & ownership
+  targetPrice?: RangeFilter;
+  pctInsiders?: RangeFilter;
+  pctInstitutions?: RangeFilter;
+  shortPctFloat?: RangeFilter;
 }
 
 // ─── Sort ───────────────────────────────────────────────
@@ -54,11 +67,29 @@ export type ScreenerSortField =
   | "lastPrice"
   | "marketCap"
   | "peRatio"
+  | "forwardPe"
+  | "pegRatio"
+  | "pbRatio"
+  | "psRatio"
+  | "evToEbitda"
+  | "evToRevenue"
   | "dividendYield"
   | "revenueGrowth"
+  | "earningsGrowth"
+  | "grossMargin"
+  | "operatingMargin"
+  | "netMargin"
+  | "roe"
+  | "roa"
+  | "debtToEquity"
+  | "currentRatio"
+  | "fcfYield"
+  | "beta"
   | "volume"
   | "week52High"
-  | "week52Low";
+  | "week52Low"
+  | "pctFrom52WeekHigh"
+  | "pctFrom52WeekLow";
 
 export type SortDirection = "asc" | "desc";
 
