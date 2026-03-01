@@ -166,6 +166,7 @@ export const api = {
   adminTriggerSync: (jobName: string) =>
     request<{ success: true; data: { message: string; jobName: string } }>(`/admin/sync-trigger/${jobName}`, {
       method: "POST",
+      body: JSON.stringify({}),
     }),
 
   // Admin config
