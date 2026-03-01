@@ -24,20 +24,12 @@ RUN pnpm --filter @stock-screener/api db:generate
 RUN pnpm --filter @stock-screener/worker build
 
 # Production
-FROM base AS production
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=build /app/packages/eodhd-client/node_modules ./packages/eodhd-client/node_modules
-COPY --from=build /app/apps/worker/node_modules ./apps/worker/node_modules
-COPY --from=build /app/packages/shared/dist ./packages/shared/dist
-COPY --from=build /app/packages/shared/package.json ./packages/shared/
-COPY --from=build /app/packages/eodhd-client/dist ./packages/eodhd-client/dist
-COPY --from=build /app/packages/eodhd-client/package.json ./packages/eodhd-client/
-COPY --from=build /app/apps/worker/dist ./apps/worker/dist
-COPY --from=build /app/apps/worker/package.json ./apps/worker/
+FROM deps AS production
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
-COPY package.json pnpm-workspace.yaml ./
+RUN pnpm --filter @stock-screener/api db:generate
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/eodhd-client/dist ./packages/eodhd-client/dist
+COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 
 WORKDIR /app/apps/worker
-RUN npx prisma generate --schema=/app/apps/api/prisma/schema.prisma
 CMD ["node", "dist/index.js"]
