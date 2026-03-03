@@ -3,11 +3,18 @@ import type { StockSummary } from "./stock.js";
 // ─── Screener Filter Types ─────────────────────────────
 
 export interface RangeFilter {
-  min?: number;
-  max?: number;
+  min?: number;  // >= (inclusive)
+  max?: number;  // <= (inclusive)
+  gt?: number;   // >  (exclusive)
+  lt?: number;   // <  (exclusive)
 }
 
+export type FilterLogic = "AND" | "OR";
+
 export interface ScreenerFilters {
+  // Logic mode: AND = all criteria must match, OR = at least one
+  filterLogic?: FilterLogic;
+
   // Classification
   exchanges?: string[];
   sectors?: string[];

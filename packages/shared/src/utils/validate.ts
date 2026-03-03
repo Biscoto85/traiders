@@ -5,14 +5,18 @@ import { z } from "zod";
 export const rangeFilterSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
+  gt: z.number().optional(),
+  lt: z.number().optional(),
 }).refine(
   (data) => {
-    if (data.min !== undefined && data.max !== undefined) {
-      return data.min <= data.max;
+    const lower = data.min ?? data.gt;
+    const upper = data.max ?? data.lt;
+    if (lower !== undefined && upper !== undefined) {
+      return lower <= upper;
     }
     return true;
   },
-  { message: "min must be less than or equal to max" }
+  { message: "lower bound must be less than or equal to upper bound" }
 );
 
 // ─── Screener ───────────────────────────────────────────
@@ -56,6 +60,7 @@ export const screenerSortSchema = z.object({
 });
 
 export const screenerFiltersSchema = z.object({
+  filterLogic: z.enum(["AND", "OR"]).optional(),
   exchanges: z.array(z.string().min(1).max(10)).optional(),
   sectors: z.array(z.string().min(1).max(100)).optional(),
   industries: z.array(z.string().min(1).max(100)).optional(),

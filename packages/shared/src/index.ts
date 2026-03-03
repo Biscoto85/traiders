@@ -11,6 +11,7 @@ export type {
 
 export type {
   RangeFilter,
+  FilterLogic,
   ScreenerFilters,
   ScreenerSortField,
   SortDirection,

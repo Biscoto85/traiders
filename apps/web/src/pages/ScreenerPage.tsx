@@ -5,10 +5,27 @@ import { formatMarketCap, formatPercent, formatRatio, DEFAULT_PRESETS } from "@s
 
 type SortField = "marketCap" | "peRatio" | "dividendYield" | "lastPrice" | "revenueGrowth" | "ticker";
 type SortDir = "asc" | "desc";
+type FilterLogic = "AND" | "OR";
+type Operator = ">" | ">=" | "<" | "<=" | "=" | "entre";
+
+interface RangeVal { min?: number; max?: number; gt?: number; lt?: number }
 
 interface LocationState {
   filters?: Record<string, unknown>;
   sort?: { field: string; direction: string };
+}
+
+// Editing state for inline preset editor
+interface EditingPresetState {
+  id: string;
+  name: string;
+  filters: Record<string, RangeVal>;
+  filterLogic: FilterLogic;
+  // temp add-criterion state
+  newKey: string;
+  newOp: Operator;
+  newVal: string;
+  newVal2: string;
 }
 
 // All available criteria with labels and categories
@@ -70,6 +87,15 @@ const GEOGRAPHIC_ZONES: Record<string, string[]> = {
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const PAGE_SIZE = 50;
 
+const OPERATOR_LABELS: Record<Operator, string> = {
+  ">": ">",
+  ">=": ">=",
+  "<": "<",
+  "<=": "<=",
+  "=": "=",
+  "entre": "entre",
+};
+
 function formatFilterNum(n: number): string {
   if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(0)}M`;
@@ -80,6 +106,250 @@ function formatFilterNum(n: number): string {
 function criteriaLabel(key: string): string {
   return CRITERIA_OPTIONS.find((c) => c.key === key)?.label ?? key;
 }
+
+/** Infer UI operator from a RangeVal */
+function inferOperator(v: RangeVal): Operator {
+  if (v.gt !== undefined && v.lt === undefined && v.min === undefined && v.max === undefined) return ">";
+  if (v.lt !== undefined && v.gt === undefined && v.min === undefined && v.max === undefined) return "<";
+  if (v.min !== undefined && v.max !== undefined) {
+    return v.min === v.max ? "=" : "entre";
+  }
+  if (v.min !== undefined) return ">=";
+  if (v.max !== undefined) return "<=";
+  return ">=";
+}
+
+/** Get the primary display value for a criterion */
+function getFilterValue(v: RangeVal): number | undefined {
+  return v.gt ?? v.min ?? v.lt ?? v.max;
+}
+
+/** Build a RangeVal from operator + value(s) */
+function buildRangeVal(op: Operator, val: number, val2?: number): RangeVal {
+  switch (op) {
+    case ">": return { gt: val };
+    case ">=": return { min: val };
+    case "<": return { lt: val };
+    case "<=": return { max: val };
+    case "=": return { min: val, max: val };
+    case "entre": return { min: val, max: val2 ?? val };
+  }
+}
+
+/** Format a RangeVal for display as a pill */
+function formatRangeLabel(key: string, v: RangeVal): string {
+  const op = inferOperator(v);
+  const val = getFilterValue(v);
+  const label = criteriaLabel(key);
+  if (op === "entre") return `${label} ${formatFilterNum(v.min!)}..${formatFilterNum(v.max!)}`;
+  if (op === "=") return `${label} = ${formatFilterNum(val!)}`;
+  return `${label} ${op} ${formatFilterNum(val!)}`;
+}
+
+/** Group criteria by category, excluding already-used keys */
+function groupAvailableCriteria(usedKeys: Set<string>): Record<string, typeof CRITERIA_OPTIONS> {
+  const byCategory: Record<string, typeof CRITERIA_OPTIONS> = {};
+  for (const c of CRITERIA_OPTIONS) {
+    if (usedKeys.has(c.key)) continue;
+    if (!byCategory[c.category]) byCategory[c.category] = [];
+    byCategory[c.category]!.push(c);
+  }
+  return byCategory;
+}
+
+// ─── Reusable criteria row component ──────────────────────
+function CriteriaRow({ filterKey, val, onUpdate, onChangeOp, onRemove }: {
+  filterKey: string;
+  val: RangeVal;
+  onUpdate: (field: "val" | "val2", value: string) => void;
+  onChangeOp: (op: Operator) => void;
+  onRemove: () => void;
+}) {
+  const meta = CRITERIA_OPTIONS.find((c) => c.key === filterKey);
+  const op = inferOperator(val);
+
+  return (
+    <div className="criteria-row">
+      <span className="criteria-row-label" title={meta?.hint}>
+        {meta?.label ?? filterKey}
+        {meta?.isPercent && <span className="criteria-row-hint"> (%)</span>}
+        {meta?.isCurrency && <span className="criteria-row-hint"> ($)</span>}
+      </span>
+      <select
+        className="filter-select criteria-row-op"
+        value={op}
+        onChange={(e) => onChangeOp(e.target.value as Operator)}
+      >
+        {Object.entries(OPERATOR_LABELS).map(([k, lbl]) => (
+          <option key={k} value={k}>{lbl}</option>
+        ))}
+      </select>
+      {op === "entre" ? (
+        <div className="criteria-row-inputs">
+          <input
+            className="form-input criteria-row-input"
+            type="number"
+            step="any"
+            placeholder="Min"
+            value={val.min ?? ""}
+            onChange={(e) => onUpdate("val", e.target.value)}
+          />
+          <span className="criteria-row-sep">-</span>
+          <input
+            className="form-input criteria-row-input"
+            type="number"
+            step="any"
+            placeholder="Max"
+            value={val.max ?? ""}
+            onChange={(e) => onUpdate("val2", e.target.value)}
+          />
+        </div>
+      ) : (
+        <div className="criteria-row-inputs">
+          <input
+            className="form-input criteria-row-input"
+            type="number"
+            step="any"
+            placeholder="Valeur"
+            value={getFilterValue(val) ?? ""}
+            onChange={(e) => onUpdate("val", e.target.value)}
+          />
+        </div>
+      )}
+      <button className="btn-icon btn-icon-danger" title="Retirer" onClick={onRemove}>
+        ×
+      </button>
+    </div>
+  );
+}
+
+// ─── Reusable add-criterion row ───────────────────────────
+function AddCriterionRow({ usedKeys, onAdd }: {
+  usedKeys: Set<string>;
+  onAdd: (key: string, range: RangeVal) => void;
+}) {
+  const [newKey, setNewKey] = useState("");
+  const [newOp, setNewOp] = useState<Operator>(">=");
+  const [newVal, setNewVal] = useState("");
+  const [newVal2, setNewVal2] = useState("");
+
+  const criteriaByCategory = groupAvailableCriteria(usedKeys);
+
+  function doAdd() {
+    if (!newKey || !newVal.trim()) return;
+    const v = parseFloat(newVal);
+    if (isNaN(v)) return;
+    const v2 = newOp === "entre" ? parseFloat(newVal2) : undefined;
+    if (newOp === "entre" && (isNaN(v2 ?? NaN))) return;
+    onAdd(newKey, buildRangeVal(newOp, v, v2));
+    setNewKey("");
+    setNewOp(">=");
+    setNewVal("");
+    setNewVal2("");
+  }
+
+  return (
+    <>
+      <div className="criteria-row criteria-row-add">
+        <div className="filter-group" style={{ flex: 1, minWidth: 160 }}>
+          <select
+            className="filter-select"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            style={{ width: "100%" }}
+          >
+            <option value="">+ Ajouter un critere...</option>
+            {Object.entries(criteriaByCategory).map(([cat, items]) => (
+              <optgroup key={cat} label={cat}>
+                {items.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        {newKey && (
+          <>
+            <select
+              className="filter-select criteria-row-op"
+              value={newOp}
+              onChange={(e) => setNewOp(e.target.value as Operator)}
+            >
+              {Object.entries(OPERATOR_LABELS).map(([k, lbl]) => (
+                <option key={k} value={k}>{lbl}</option>
+              ))}
+            </select>
+            <div className="criteria-row-inputs">
+              <input
+                className="form-input criteria-row-input"
+                type="number"
+                step="any"
+                value={newVal}
+                onChange={(e) => setNewVal(e.target.value)}
+                placeholder={CRITERIA_OPTIONS.find((c) => c.key === newKey)?.hint?.split(" - ")[0]?.replace("ex: ", "") ?? "Valeur"}
+              />
+              {newOp === "entre" && (
+                <>
+                  <span className="criteria-row-sep">-</span>
+                  <input
+                    className="form-input criteria-row-input"
+                    type="number"
+                    step="any"
+                    value={newVal2}
+                    onChange={(e) => setNewVal2(e.target.value)}
+                    placeholder={CRITERIA_OPTIONS.find((c) => c.key === newKey)?.hint?.split(" - ")[1] ?? "Max"}
+                  />
+                </>
+              )}
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem", whiteSpace: "nowrap" }}
+              onClick={doAdd}
+              disabled={!newVal.trim()}
+            >
+              OK
+            </button>
+          </>
+        )}
+      </div>
+      {newKey && (
+        <div style={{ marginTop: "0.25rem", fontSize: "0.7rem", color: "var(--text-muted)" }}>
+          {CRITERIA_OPTIONS.find((c) => c.key === newKey)?.isPercent
+            ? "Decimales (ex: 0.12 = 12%)"
+            : CRITERIA_OPTIONS.find((c) => c.key === newKey)?.isCurrency
+              ? "Devise (ex: 1000000000 = 1B)"
+              : "Ratio"}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Logic toggle component ───────────────────────────────
+function LogicToggle({ value, onChange }: { value: FilterLogic; onChange: (v: FilterLogic) => void }) {
+  return (
+    <div className="logic-toggle">
+      <span className="logic-toggle-label">Logique :</span>
+      <button
+        className={`logic-toggle-btn ${value === "AND" ? "logic-toggle-active" : ""}`}
+        onClick={() => onChange("AND")}
+      >
+        ET
+      </button>
+      <button
+        className={`logic-toggle-btn ${value === "OR" ? "logic-toggle-active" : ""}`}
+        onClick={() => onChange("OR")}
+      >
+        OU
+      </button>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════
+// Main Component
+// ═════════════════════════════════════════════════════════════
 
 export default function ScreenerPage() {
   const location = useLocation();
@@ -96,8 +366,9 @@ export default function ScreenerPage() {
   const [sector, setSector] = useState("");
   const [country, setCountry] = useState("");
 
-  // Range filters
-  const [rangeFilters, setRangeFilters] = useState<Record<string, unknown>>({});
+  // Range filters + logic
+  const [rangeFilters, setRangeFilters] = useState<Record<string, RangeVal>>({});
+  const [filterLogic, setFilterLogic] = useState<FilterLogic>("AND");
   const [presetName, setPresetName] = useState<string | null>(null);
 
   // Sort
@@ -110,11 +381,8 @@ export default function ScreenerPage() {
   // Alphabet navigation
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
 
-  // Criteria editor
+  // Criteria editor (free screen)
   const [showCriteriaPanel, setShowCriteriaPanel] = useState(false);
-  const [newCriterionKey, setNewCriterionKey] = useState("");
-  const [newCriterionMin, setNewCriterionMin] = useState("");
-  const [newCriterionMax, setNewCriterionMax] = useState("");
 
   // Presets selector
   const [userPresets, setUserPresets] = useState<Preset[]>([]);
@@ -124,13 +392,16 @@ export default function ScreenerPage() {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [togglingBookmark, setTogglingBookmark] = useState<string | null>(null);
 
-  // Save / edit preset
+  // Save preset (from free screen)
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
 
-  // Expanded preset (show criteria detail)
+  // Inline preset editing
+  const [editingPreset, setEditingPreset] = useState<EditingPresetState | null>(null);
+  const [savingPreset, setSavingPreset] = useState(false);
+
+  // Expanded preset (read-only detail)
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
   // Apply incoming preset state
@@ -152,7 +423,12 @@ export default function ScreenerPage() {
       delete f.countries;
     }
 
-    setRangeFilters(f);
+    if (f.filterLogic) {
+      setFilterLogic(f.filterLogic as FilterLogic);
+      delete f.filterLogic;
+    }
+
+    setRangeFilters(f as Record<string, RangeVal>);
     setPresetName("Preset applique");
 
     if (incomingState.sort) {
@@ -184,6 +460,7 @@ export default function ScreenerPage() {
       }
       if (sector) filters.sectors = [sector];
       if (country) filters.countries = [country];
+      if (filterLogic !== "AND") filters.filterLogic = filterLogic;
 
       const offset = (currentPage - 1) * PAGE_SIZE;
 
@@ -202,7 +479,7 @@ export default function ScreenerPage() {
     } finally {
       setLoading(false);
     }
-  }, [zone, exchange, sector, country, sortField, sortDir, rangeFilters, currentPage, activeLetter]);
+  }, [zone, exchange, sector, country, sortField, sortDir, rangeFilters, filterLogic, currentPage, activeLetter]);
 
   useEffect(() => {
     fetchStocks();
@@ -230,6 +507,7 @@ export default function ScreenerPage() {
 
   function clearPreset() {
     setRangeFilters({});
+    setFilterLogic("AND");
     setPresetName(null);
     setZone("");
     setExchange("");
@@ -238,7 +516,6 @@ export default function ScreenerPage() {
     setSortField("marketCap");
     setSortDir("desc");
     setActiveLetter(null);
-    setEditingPresetId(null);
     resetPage();
   }
 
@@ -251,20 +528,7 @@ export default function ScreenerPage() {
     setCurrentPage(1);
   }
 
-  function addCriterion() {
-    if (!newCriterionKey) return;
-    const range: { min?: number; max?: number } = {};
-    if (newCriterionMin.trim()) range.min = parseFloat(newCriterionMin);
-    if (newCriterionMax.trim()) range.max = parseFloat(newCriterionMax);
-    if (range.min === undefined && range.max === undefined) return;
-    if (isNaN(range.min ?? 0) || isNaN(range.max ?? 0)) return;
-
-    setRangeFilters((prev) => ({ ...prev, [newCriterionKey]: range }));
-    setNewCriterionKey("");
-    setNewCriterionMin("");
-    setNewCriterionMax("");
-    resetPage();
-  }
+  // ─── Free-screen criterion operations ──────────────────
 
   function removeCriterion(key: string) {
     setRangeFilters((prev) => {
@@ -275,26 +539,59 @@ export default function ScreenerPage() {
     resetPage();
   }
 
-  function updateCriterion(key: string, field: "min" | "max", value: string) {
+  function updateCriterionValue(key: string, field: "val" | "val2", value: string) {
     setRangeFilters((prev) => {
-      const existing = (prev[key] as { min?: number; max?: number }) ?? {};
-      const updated = { ...existing };
+      const existing = prev[key] ?? {};
+      const op = inferOperator(existing);
+
       if (value.trim() === "") {
-        delete updated[field];
-      } else {
-        const num = parseFloat(value);
-        if (!isNaN(num)) updated[field] = num;
-      }
-      // Remove the criterion entirely if both min and max are gone
-      if (updated.min === undefined && updated.max === undefined) {
+        // Clearing a value
+        if (op === "entre") {
+          if (field === "val") {
+            const updated = { ...existing };
+            delete updated.min;
+            if (updated.max === undefined) { const next = { ...prev }; delete next[key]; return next; }
+            return { ...prev, [key]: updated };
+          } else {
+            const updated = { ...existing };
+            delete updated.max;
+            if (updated.min === undefined) { const next = { ...prev }; delete next[key]; return next; }
+            return { ...prev, [key]: updated };
+          }
+        }
         const next = { ...prev };
         delete next[key];
         return next;
       }
-      return { ...prev, [key]: updated };
+
+      const num = parseFloat(value);
+      if (isNaN(num)) return prev;
+
+      if (op === "entre") {
+        if (field === "val") return { ...prev, [key]: { ...existing, min: num } };
+        return { ...prev, [key]: { ...existing, max: num } };
+      }
+      // Single-value operators: rebuild from operator
+      return { ...prev, [key]: buildRangeVal(op, num) };
     });
     resetPage();
   }
+
+  function changeOperator(key: string, newOp: Operator) {
+    setRangeFilters((prev) => {
+      const existing = prev[key] ?? {};
+      const currentVal = getFilterValue(existing) ?? 0;
+      return { ...prev, [key]: buildRangeVal(newOp, currentVal, existing.max ?? currentVal) };
+    });
+    resetPage();
+  }
+
+  function addCriterionToFreeScreen(key: string, range: RangeVal) {
+    setRangeFilters((prev) => ({ ...prev, [key]: range }));
+    resetPage();
+  }
+
+  // ─── Preset operations ─────────────────────────────────
 
   function applyPreset(filters: Record<string, unknown>, sort?: Record<string, unknown> | null, name?: string) {
     const f = { ...filters };
@@ -318,7 +615,14 @@ export default function ScreenerPage() {
       setCountry("");
     }
 
-    setRangeFilters(f);
+    if (f.filterLogic) {
+      setFilterLogic(f.filterLogic as FilterLogic);
+      delete f.filterLogic;
+    } else {
+      setFilterLogic("AND");
+    }
+
+    setRangeFilters(f as Record<string, RangeVal>);
     setPresetName(name ?? "Preset applique");
     setActiveLetter(null);
     resetPage();
@@ -334,7 +638,7 @@ export default function ScreenerPage() {
     setShowPresets(false);
   }
 
-  async function handleSavePreset() {
+  async function handleSaveNewPreset() {
     if (!saveName.trim()) return;
     setSaving(true);
     try {
@@ -342,26 +646,15 @@ export default function ScreenerPage() {
       if (exchange) filters.exchanges = [exchange];
       if (sector) filters.sectors = [sector];
       if (country) filters.countries = [country];
+      if (filterLogic !== "AND") filters.filterLogic = filterLogic;
 
-      if (editingPresetId) {
-        // Update existing preset
-        const res = await api.updatePreset(editingPresetId, {
-          name: saveName.trim(),
-          filters,
-          sort: { field: sortField, direction: sortDir },
-        });
-        setUserPresets((prev) => prev.map((p) => (p.id === editingPresetId ? res.data : p)));
-        setEditingPresetId(null);
-      } else {
-        // Create new preset
-        const res = await api.createPreset({
-          name: saveName.trim(),
-          filters,
-          sort: { field: sortField, direction: sortDir },
-          isPublic: false,
-        });
-        setUserPresets((prev) => [res.data, ...prev]);
-      }
+      const res = await api.createPreset({
+        name: saveName.trim(),
+        filters,
+        sort: { field: sortField, direction: sortDir },
+        isPublic: false,
+      });
+      setUserPresets((prev) => [res.data, ...prev]);
       setSaveName("");
       setShowSave(false);
     } catch (err) {
@@ -371,13 +664,114 @@ export default function ScreenerPage() {
     }
   }
 
+  // ─── Inline preset editing ─────────────────────────────
+
   function startEditPreset(preset: Preset) {
-    applyPreset(preset.filters, preset.sort, preset.name);
-    setEditingPresetId(preset.id);
-    setSaveName(preset.name);
-    setShowSave(true);
-    setShowPresets(false);
-    setShowCriteriaPanel(true);
+    const f = { ...preset.filters };
+    // Extract non-range keys
+    delete f.exchanges;
+    delete f.sectors;
+    delete f.countries;
+    const logic = (f.filterLogic as FilterLogic) ?? "AND";
+    delete f.filterLogic;
+
+    setEditingPreset({
+      id: preset.id,
+      name: preset.name,
+      filters: f as Record<string, RangeVal>,
+      filterLogic: logic,
+      newKey: "",
+      newOp: ">=",
+      newVal: "",
+      newVal2: "",
+    });
+    setExpandedPreset(null);
+  }
+
+  function updateEditingFilter(key: string, field: "val" | "val2", value: string) {
+    setEditingPreset((prev) => {
+      if (!prev) return prev;
+      const existing = prev.filters[key] ?? {};
+      const op = inferOperator(existing);
+
+      if (value.trim() === "") {
+        if (op === "entre") {
+          const updated = { ...existing };
+          if (field === "val") delete updated.min; else delete updated.max;
+          if (updated.min === undefined && updated.max === undefined) {
+            const next = { ...prev.filters };
+            delete next[key];
+            return { ...prev, filters: next };
+          }
+          return { ...prev, filters: { ...prev.filters, [key]: updated } };
+        }
+        const next = { ...prev.filters };
+        delete next[key];
+        return { ...prev, filters: next };
+      }
+
+      const num = parseFloat(value);
+      if (isNaN(num)) return prev;
+
+      if (op === "entre") {
+        if (field === "val") return { ...prev, filters: { ...prev.filters, [key]: { ...existing, min: num } } };
+        return { ...prev, filters: { ...prev.filters, [key]: { ...existing, max: num } } };
+      }
+      return { ...prev, filters: { ...prev.filters, [key]: buildRangeVal(op, num) } };
+    });
+  }
+
+  function changeEditingOperator(key: string, newOp: Operator) {
+    setEditingPreset((prev) => {
+      if (!prev) return prev;
+      const existing = prev.filters[key] ?? {};
+      const currentVal = getFilterValue(existing) ?? 0;
+      return { ...prev, filters: { ...prev.filters, [key]: buildRangeVal(newOp, currentVal, existing.max ?? currentVal) } };
+    });
+  }
+
+  function removeEditingFilter(key: string) {
+    setEditingPreset((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev.filters };
+      delete next[key];
+      return { ...prev, filters: next };
+    });
+  }
+
+  function addEditingCriterion(key: string, range: RangeVal) {
+    setEditingPreset((prev) => {
+      if (!prev) return prev;
+      return { ...prev, filters: { ...prev.filters, [key]: range }, newKey: "", newOp: ">=", newVal: "", newVal2: "" };
+    });
+  }
+
+  async function saveEditingPreset() {
+    if (!editingPreset || !editingPreset.name.trim()) return;
+    setSavingPreset(true);
+    try {
+      const filters: Record<string, unknown> = { ...editingPreset.filters };
+      if (editingPreset.filterLogic !== "AND") filters.filterLogic = editingPreset.filterLogic;
+
+      const res = await api.updatePreset(editingPreset.id, {
+        name: editingPreset.name.trim(),
+        filters,
+      });
+      setUserPresets((prev) => prev.map((p) => (p.id === editingPreset.id ? res.data : p)));
+      setEditingPreset(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setSavingPreset(false);
+    }
+  }
+
+  function applyEditingPreset() {
+    if (!editingPreset) return;
+    const filters: Record<string, unknown> = { ...editingPreset.filters };
+    if (editingPreset.filterLogic !== "AND") filters.filterLogic = editingPreset.filterLogic;
+    applyPreset(filters, null, editingPreset.name);
+    setEditingPreset(null);
   }
 
   async function handleDeletePreset(id: string) {
@@ -385,7 +779,7 @@ export default function ScreenerPage() {
     try {
       await api.deletePreset(id);
       setUserPresets((prev) => prev.filter((p) => p.id !== id));
-      if (editingPresetId === id) setEditingPresetId(null);
+      if (editingPreset?.id === id) setEditingPreset(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erreur");
     }
@@ -416,16 +810,7 @@ export default function ScreenerPage() {
     : filterOptions?.exchanges ?? [];
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  // Available criteria (exclude already-added ones)
   const usedKeys = new Set(Object.keys(rangeFilters));
-  const availableCriteria = CRITERIA_OPTIONS.filter((c) => !usedKeys.has(c.key));
-
-  // Group available criteria by category
-  const criteriaByCategory: Record<string, typeof CRITERIA_OPTIONS> = {};
-  for (const c of availableCriteria) {
-    if (!criteriaByCategory[c.category]) criteriaByCategory[c.category] = [];
-    criteriaByCategory[c.category]!.push(c);
-  }
 
   // Generate page numbers to display
   function getPageNumbers(): (number | "...")[] {
@@ -442,7 +827,7 @@ export default function ScreenerPage() {
 
   return (
     <div>
-      {/* Preset selector bar */}
+      {/* Toolbar */}
       <div className="screener-toolbar">
         <button
           className={`btn ${showPresets ? "btn-primary" : "btn-ghost"}`}
@@ -466,12 +851,12 @@ export default function ScreenerPage() {
                   value={saveName}
                   onChange={(e) => setSaveName(e.target.value)}
                   placeholder="Nom du preset"
-                  onKeyDown={(e) => e.key === "Enter" && handleSavePreset()}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveNewPreset()}
                 />
                 <button
                   className="btn btn-primary"
                   style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
-                  onClick={handleSavePreset}
+                  onClick={handleSaveNewPreset}
                   disabled={saving || !saveName.trim()}
                 >
                   OK
@@ -488,86 +873,151 @@ export default function ScreenerPage() {
               <button
                 className="btn btn-ghost"
                 style={{ fontSize: "0.75rem" }}
-                onClick={() => { setShowSave(true); if (!editingPresetId) setSaveName(""); }}
+                onClick={() => { setShowSave(true); setSaveName(""); }}
               >
-                {editingPresetId ? "Modifier le preset" : "Sauvegarder"}
+                Sauvegarder
               </button>
             )}
           </>
         )}
       </div>
 
-      {/* Presets dropdown panel */}
+      {/* ═══ Presets panel ═══ */}
       {showPresets && (
         <div className="card screener-panel">
           <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
             {/* User presets */}
-            <div style={{ flex: 1, minWidth: 250 }}>
+            <div style={{ flex: 1, minWidth: 280 }}>
               <h4 style={{ marginBottom: "0.5rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Mes presets
               </h4>
               {userPresets.length === 0 ? (
                 <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Aucun preset sauvegarde</div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {userPresets.map((p) => (
                     <div key={p.id} className="preset-item-wrapper">
-                      <div className="preset-item" style={{ cursor: "default" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                          <div style={{ flex: 1, cursor: "pointer" }} onClick={() => applyPreset(p.filters, p.sort, p.name)}>
-                            <strong>{p.name}</strong>
-                            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>
-                              {Object.keys(p.filters).length} criteres
-                            </span>
+                      {editingPreset?.id === p.id ? (
+                        /* ─── Inline editing mode ─── */
+                        <div className="preset-item preset-editing">
+                          <div className="preset-edit-header">
+                            <input
+                              className="form-input preset-edit-name"
+                              value={editingPreset.name}
+                              onChange={(e) => setEditingPreset({ ...editingPreset, name: e.target.value })}
+                              placeholder="Nom du preset"
+                            />
+                            <LogicToggle
+                              value={editingPreset.filterLogic}
+                              onChange={(v) => setEditingPreset({ ...editingPreset, filterLogic: v })}
+                            />
                           </div>
-                          <div style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }}>
+
+                          {/* Editable criteria rows */}
+                          {Object.keys(editingPreset.filters).length > 0 && (
+                            <div className="criteria-list">
+                              {Object.entries(editingPreset.filters).map(([key, val]) => (
+                                <CriteriaRow
+                                  key={key}
+                                  filterKey={key}
+                                  val={val}
+                                  onUpdate={(f, v) => updateEditingFilter(key, f, v)}
+                                  onChangeOp={(op) => changeEditingOperator(key, op)}
+                                  onRemove={() => removeEditingFilter(key)}
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Add criterion */}
+                          <AddCriterionRow
+                            usedKeys={new Set(Object.keys(editingPreset.filters))}
+                            onAdd={addEditingCriterion}
+                          />
+
+                          {/* Action buttons */}
+                          <div className="preset-edit-actions">
                             <button
-                              className="btn-icon"
-                              title="Voir les criteres"
-                              onClick={(e) => { e.stopPropagation(); setExpandedPreset(expandedPreset === p.id ? null : p.id); }}
+                              className="btn btn-primary"
+                              style={{ fontSize: "0.75rem" }}
+                              onClick={saveEditingPreset}
+                              disabled={savingPreset || !editingPreset.name.trim()}
                             >
-                              {expandedPreset === p.id ? "\u25B2" : "\u25BC"}
+                              Sauvegarder
                             </button>
                             <button
-                              className="btn-icon"
-                              title="Editer"
-                              onClick={(e) => { e.stopPropagation(); startEditPreset(p); }}
+                              className="btn btn-ghost"
+                              style={{ fontSize: "0.75rem" }}
+                              onClick={applyEditingPreset}
                             >
-                              \u270E
+                              Appliquer
                             </button>
                             <button
-                              className="btn-icon btn-icon-danger"
-                              title="Supprimer"
-                              onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id); }}
+                              className="btn btn-ghost"
+                              style={{ fontSize: "0.75rem" }}
+                              onClick={() => setEditingPreset(null)}
                             >
-                              \u2715
+                              Annuler
                             </button>
                           </div>
                         </div>
-                        {expandedPreset === p.id && (
-                          <div className="preset-criteria">
-                            {Object.entries(p.filters).map(([key, val]) => {
-                              const v = val as { min?: number; max?: number } | string[];
-                              if (Array.isArray(v)) {
-                                return <span key={key} className="filter-pill">{key}: {v.join(", ")}</span>;
-                              }
-                              const parts: string[] = [];
-                              if (v && typeof v === "object") {
-                                if (v.min !== undefined) parts.push(`>=${formatFilterNum(v.min)}`);
-                                if (v.max !== undefined) parts.push(`<=${formatFilterNum(v.max)}`);
-                              }
-                              return <span key={key} className="filter-pill">{criteriaLabel(key)} {parts.join(" ")}</span>;
-                            })}
+                      ) : (
+                        /* ─── Read-only mode ─── */
+                        <div className="preset-item" style={{ cursor: "default" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                            <div style={{ flex: 1, cursor: "pointer" }} onClick={() => applyPreset(p.filters, p.sort, p.name)}>
+                              <strong>{p.name}</strong>
+                              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>
+                                {Object.keys(p.filters).filter((k) => k !== "filterLogic").length} criteres
+                                {(p.filters as Record<string, unknown>).filterLogic === "OR" && " (OU)"}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }}>
+                              <button
+                                className="btn-icon"
+                                title="Voir les criteres"
+                                onClick={(e) => { e.stopPropagation(); setExpandedPreset(expandedPreset === p.id ? null : p.id); }}
+                              >
+                                {expandedPreset === p.id ? "\u25B2" : "\u25BC"}
+                              </button>
+                              <button
+                                className="btn-icon"
+                                title="Editer"
+                                onClick={(e) => { e.stopPropagation(); startEditPreset(p); }}
+                              >
+                                ✎
+                              </button>
+                              <button
+                                className="btn-icon btn-icon-danger"
+                                title="Supprimer"
+                                onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id); }}
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </div>
-                        )}
-                      </div>
+                          {expandedPreset === p.id && (
+                            <div className="preset-criteria">
+                              {Object.entries(p.filters)
+                                .filter(([key]) => key !== "filterLogic")
+                                .map(([key, val]) => {
+                                  const v = val as RangeVal | string[];
+                                  if (Array.isArray(v)) {
+                                    return <span key={key} className="filter-pill">{key}: {v.join(", ")}</span>;
+                                  }
+                                  return <span key={key} className="filter-pill">{formatRangeLabel(key, v)}</span>;
+                                })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
             {/* Default presets */}
-            <div style={{ flex: 1, minWidth: 250 }}>
+            <div style={{ flex: 1, minWidth: 280 }}>
               <h4 style={{ marginBottom: "0.5rem", color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Strategies expertes
               </h4>
@@ -593,11 +1043,8 @@ export default function ScreenerPage() {
                       {expandedPreset === dp.name && (
                         <div className="preset-criteria">
                           {Object.entries(dp.filters).map(([key, val]) => {
-                            const v = val as { min?: number; max?: number };
-                            const parts: string[] = [];
-                            if (v.min !== undefined) parts.push(`>=${formatFilterNum(v.min)}`);
-                            if (v.max !== undefined) parts.push(`<=${formatFilterNum(v.max)}`);
-                            return <span key={key} className="filter-pill">{criteriaLabel(key)} {parts.join(" ")}</span>;
+                            const v = val as RangeVal;
+                            return <span key={key} className="filter-pill">{formatRangeLabel(key, v)}</span>;
                           })}
                         </div>
                       )}
@@ -610,121 +1057,31 @@ export default function ScreenerPage() {
         </div>
       )}
 
-      {/* Criteria editor panel */}
+      {/* ═══ Free screen criteria editor ═══ */}
       {showCriteriaPanel && (
         <div className="card screener-panel">
-          {editingPresetId && (
-            <div style={{ marginBottom: "0.75rem", fontSize: "0.8rem", color: "var(--primary)", fontWeight: 500 }}>
-              Edition : {presetName}
-            </div>
-          )}
+          <LogicToggle value={filterLogic} onChange={(v) => { setFilterLogic(v); resetPage(); }} />
 
           {/* Active criteria — editable rows */}
           {Object.keys(rangeFilters).length > 0 && (
-            <div className="criteria-list">
-              {Object.entries(rangeFilters).map(([key, val]) => {
-                const v = val as { min?: number; max?: number };
-                const meta = CRITERIA_OPTIONS.find((c) => c.key === key);
-                return (
-                  <div key={key} className="criteria-row">
-                    <span className="criteria-row-label" title={meta?.hint}>
-                      {meta?.label ?? key}
-                      {meta?.isPercent && <span className="criteria-row-hint"> (%)</span>}
-                      {meta?.isCurrency && <span className="criteria-row-hint"> ($)</span>}
-                    </span>
-                    <div className="criteria-row-inputs">
-                      <input
-                        className="form-input criteria-row-input"
-                        type="number"
-                        step="any"
-                        placeholder="Min"
-                        value={v?.min ?? ""}
-                        onChange={(e) => updateCriterion(key, "min", e.target.value)}
-                      />
-                      <span className="criteria-row-sep">-</span>
-                      <input
-                        className="form-input criteria-row-input"
-                        type="number"
-                        step="any"
-                        placeholder="Max"
-                        value={v?.max ?? ""}
-                        onChange={(e) => updateCriterion(key, "max", e.target.value)}
-                      />
-                    </div>
-                    <button
-                      className="btn-icon btn-icon-danger"
-                      title="Retirer ce critere"
-                      onClick={() => removeCriterion(key)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
+            <div className="criteria-list" style={{ marginTop: "0.75rem" }}>
+              {Object.entries(rangeFilters).map(([key, val]) => (
+                <CriteriaRow
+                  key={key}
+                  filterKey={key}
+                  val={val}
+                  onUpdate={(f, v) => updateCriterionValue(key, f, v)}
+                  onChangeOp={(op) => changeOperator(key, op)}
+                  onRemove={() => removeCriterion(key)}
+                />
+              ))}
             </div>
           )}
 
-          {/* Add new criterion row */}
-          <div className="criteria-row criteria-row-add">
-            <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
-              <select
-                className="filter-select"
-                value={newCriterionKey}
-                onChange={(e) => setNewCriterionKey(e.target.value)}
-                style={{ width: "100%" }}
-              >
-                <option value="">+ Ajouter un critere...</option>
-                {Object.entries(criteriaByCategory).map(([cat, items]) => (
-                  <optgroup key={cat} label={cat}>
-                    {items.map((c) => (
-                      <option key={c.key} value={c.key}>{c.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-            {newCriterionKey && (
-              <>
-                <div className="criteria-row-inputs">
-                  <input
-                    className="form-input criteria-row-input"
-                    type="number"
-                    step="any"
-                    value={newCriterionMin}
-                    onChange={(e) => setNewCriterionMin(e.target.value)}
-                    placeholder={CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.hint?.split(" - ")[0]?.replace("ex: ", "") ?? "Min"}
-                  />
-                  <span className="criteria-row-sep">-</span>
-                  <input
-                    className="form-input criteria-row-input"
-                    type="number"
-                    step="any"
-                    value={newCriterionMax}
-                    onChange={(e) => setNewCriterionMax(e.target.value)}
-                    placeholder={CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.hint?.split(" - ")[1] ?? "Max"}
-                  />
-                </div>
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem", whiteSpace: "nowrap" }}
-                  onClick={addCriterion}
-                  disabled={!newCriterionMin.trim() && !newCriterionMax.trim()}
-                >
-                  OK
-                </button>
-              </>
-            )}
+          {/* Add new criterion */}
+          <div style={{ marginTop: "0.5rem" }}>
+            <AddCriterionRow usedKeys={usedKeys} onAdd={addCriterionToFreeScreen} />
           </div>
-
-          {newCriterionKey && (
-            <div style={{ marginTop: "0.375rem", fontSize: "0.7rem", color: "var(--text-muted)" }}>
-              {CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.isPercent
-                ? "Decimales (ex: 0.12 = 12%)"
-                : CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.isCurrency
-                  ? "Devise (ex: 1000000000 = 1B)"
-                  : "Ratio"}
-            </div>
-          )}
         </div>
       )}
 
@@ -770,26 +1127,19 @@ export default function ScreenerPage() {
         {/* Range filters pills */}
         {Object.keys(rangeFilters).length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.375rem", alignSelf: "flex-end" }}>
-            {Object.entries(rangeFilters).map(([key, val]) => {
-              const v = val as { min?: number; max?: number };
-              let label = criteriaLabel(key);
-              if (v && typeof v === "object") {
-                const parts: string[] = [];
-                if (v.min !== undefined) parts.push(`>=${formatFilterNum(v.min)}`);
-                if (v.max !== undefined) parts.push(`<=${formatFilterNum(v.max)}`);
-                label = `${criteriaLabel(key)} ${parts.join(" ")}`;
-              }
-              return (
-                <span
-                  key={key}
-                  className="filter-pill"
-                  onClick={() => removeCriterion(key)}
-                  title="Cliquer pour retirer"
-                >
-                  {label} ×
-                </span>
-              );
-            })}
+            {filterLogic === "OR" && Object.keys(rangeFilters).length > 1 && (
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontStyle: "italic" }}>OU</span>
+            )}
+            {Object.entries(rangeFilters).map(([key, val]) => (
+              <span
+                key={key}
+                className="filter-pill"
+                onClick={() => removeCriterion(key)}
+                title="Cliquer pour retirer"
+              >
+                {formatRangeLabel(key, val)} ×
+              </span>
+            ))}
           </div>
         )}
       </div>

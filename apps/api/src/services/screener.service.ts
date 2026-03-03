@@ -42,7 +42,7 @@ export function buildScreenerQuery(
     where.exchange = { country: { in: filters.countries } };
   }
 
-  // ── Range filters (map to Prisma gte/lte) ──
+  // ── Range filters (map to Prisma gte/gt/lte/lt) ──
   const rangeMap: Array<[keyof ScreenerFilters, keyof Prisma.StockWhereInput]> = [
     // Valuation
     ["peRatio", "peRatio"],
@@ -82,15 +82,30 @@ export function buildScreenerQuery(
     ["shortPctFloat", "shortPctFloat"],
   ];
 
+  const filterLogic = filters.filterLogic ?? "AND";
+  const rangeConditions: Prisma.StockWhereInput[] = [];
+
   for (const [filterKey, dbField] of rangeMap) {
     const range = filters[filterKey] as RangeFilter | undefined;
     if (range) {
       const condition: Prisma.FloatNullableFilter = {};
       if (range.min !== undefined) condition.gte = range.min;
       if (range.max !== undefined) condition.lte = range.max;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (where as any)[dbField] = condition;
+      if (range.gt !== undefined) condition.gt = range.gt;
+      if (range.lt !== undefined) condition.lt = range.lt;
+
+      if (filterLogic === "OR") {
+        rangeConditions.push({ [dbField]: condition });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (where as any)[dbField] = condition;
+      }
     }
+  }
+
+  // Apply OR logic: at least one range criterion must match
+  if (filterLogic === "OR" && rangeConditions.length > 0) {
+    where.OR = rangeConditions;
   }
 
   // ── Sort ──
