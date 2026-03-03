@@ -66,6 +66,17 @@ model Stock {
   freeCashFlow    Float? // FCF from latest data
   fcfYield        Float? // freeCashFlow / marketCap
 
+  // ── Cash-flow & debt metrics (Pikpik strategy) ──
+  operatingCashFlow Float? // Operating CF from latest quarterly
+  totalDebt         Float? // Long-term debt
+  cashAndEquiv      Float? // Cash & short-term investments
+  totalEquity       Float? // Total stockholder equity
+  netDebt           Float? // totalDebt - cashAndEquiv
+  priceToOCF        Float? // marketCap / operatingCashFlow
+  netDebtToOCF      Float? // netDebt / operatingCashFlow
+  equityToMarketCap Float? // totalEquity / marketCap
+  revenueCAGR5Y     Float? // 5-year revenue CAGR
+
   // ── Analyst / ownership ──
   targetPrice        Float? // Wall Street consensus target
   pctInsiders        Float? // % held by insiders

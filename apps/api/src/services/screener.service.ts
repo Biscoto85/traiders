@@ -75,6 +75,13 @@ export function buildScreenerQuery(
     // 52-week relative
     ["pctFrom52WeekHigh", "pctFrom52WeekHigh"],
     ["pctFrom52WeekLow", "pctFrom52WeekLow"],
+    // Cash-flow & debt metrics
+    ["operatingCashFlow", "operatingCashFlow"],
+    ["priceToOCF", "priceToOCF"],
+    ["netDebt", "netDebt"],
+    ["netDebtToOCF", "netDebtToOCF"],
+    ["equityToMarketCap", "equityToMarketCap"],
+    ["revenueCAGR5Y", "revenueCAGR5Y"],
     // Analyst & ownership
     ["targetPrice", "targetPrice"],
     ["pctInsiders", "pctInsiders"],
@@ -141,6 +148,12 @@ export function buildScreenerQuery(
     week52Low: "week52Low",
     pctFrom52WeekHigh: "pctFrom52WeekHigh",
     pctFrom52WeekLow: "pctFrom52WeekLow",
+    operatingCashFlow: "operatingCashFlow",
+    priceToOCF: "priceToOCF",
+    netDebt: "netDebt",
+    netDebtToOCF: "netDebtToOCF",
+    equityToMarketCap: "equityToMarketCap",
+    revenueCAGR5Y: "revenueCAGR5Y",
   };
 
   const orderByField = fieldMapping[sortField] ?? "marketCap";
@@ -186,6 +199,12 @@ const SCREENER_SELECT = {
   pbRatio: true,
   psRatio: true,
   fcfYield: true,
+  operatingCashFlow: true,
+  priceToOCF: true,
+  netDebt: true,
+  netDebtToOCF: true,
+  equityToMarketCap: true,
+  revenueCAGR5Y: true,
   targetPrice: true,
   priceUpdatedAt: true,
 } as const;

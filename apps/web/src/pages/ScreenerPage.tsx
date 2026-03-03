@@ -58,9 +58,16 @@ const CRITERIA_OPTIONS: Array<{
   // Growth
   { key: "revenueGrowth", label: "Croiss. revenus", category: "Croissance", hint: "ex: 0.10", isPercent: true },
   { key: "earningsGrowth", label: "Croiss. benefices", category: "Croissance", hint: "ex: 0.08", isPercent: true },
+  { key: "revenueCAGR5Y", label: "TCAM revenus 5 ans", category: "Croissance", hint: "ex: 0.15 = 15%/an", isPercent: true },
   // Yield
   { key: "dividendYield", label: "Div. Yield", category: "Rendement", hint: "ex: 0.025", isPercent: true },
   { key: "fcfYield", label: "FCF Yield", category: "Rendement", hint: "ex: 0.05", isPercent: true },
+  // Cash-flow & dette
+  { key: "operatingCashFlow", label: "CF Operationnel", category: "Cash-flow", isCurrency: true },
+  { key: "priceToOCF", label: "Capi / CF Oper.", category: "Cash-flow", hint: "ex: 5 - 25" },
+  { key: "netDebt", label: "Dette nette", category: "Cash-flow", isCurrency: true },
+  { key: "netDebtToOCF", label: "Dette nette / CF Oper.", category: "Cash-flow", hint: "ex: 0 - 5" },
+  { key: "equityToMarketCap", label: "Equity / Capi", category: "Cash-flow", hint: "ex: 0.2 - 1", isPercent: true },
   // Risk
   { key: "beta", label: "Beta", category: "Risque", hint: "ex: 0.5 - 1.5" },
   { key: "debtToEquity", label: "Debt/Equity", category: "Risque", hint: "ex: 0 - 1.5" },

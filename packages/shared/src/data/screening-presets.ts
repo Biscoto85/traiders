@@ -102,4 +102,16 @@ export const DEFAULT_PRESETS = [
     },
     sort: { field: "evToEbitda" as const, direction: "asc" as const },
   },
+  {
+    name: "Pikpik Investment Fund",
+    description: "Anomalies de valorisation via CF operationnel, dette nette et croissance 5 ans — methode Pikpik",
+    filters: {
+      priceToOCF: { max: 25 },
+      netDebtToOCF: { max: 5 },
+      revenueCAGR5Y: { min: 0.05 },
+      equityToMarketCap: { min: 0.10 },
+      marketCap: { min: 500_000_000 },
+    },
+    sort: { field: "priceToOCF" as const, direction: "asc" as const },
+  },
 ] as const;

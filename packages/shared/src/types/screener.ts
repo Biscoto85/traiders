@@ -59,6 +59,14 @@ export interface ScreenerFilters {
   pctFrom52WeekHigh?: RangeFilter;
   pctFrom52WeekLow?: RangeFilter;
 
+  // Cash-flow & debt metrics
+  operatingCashFlow?: RangeFilter;
+  priceToOCF?: RangeFilter;
+  netDebt?: RangeFilter;
+  netDebtToOCF?: RangeFilter;
+  equityToMarketCap?: RangeFilter;
+  revenueCAGR5Y?: RangeFilter;
+
   // Analyst & ownership
   targetPrice?: RangeFilter;
   pctInsiders?: RangeFilter;
@@ -96,7 +104,13 @@ export type ScreenerSortField =
   | "week52High"
   | "week52Low"
   | "pctFrom52WeekHigh"
-  | "pctFrom52WeekLow";
+  | "pctFrom52WeekLow"
+  | "operatingCashFlow"
+  | "priceToOCF"
+  | "netDebt"
+  | "netDebtToOCF"
+  | "equityToMarketCap"
+  | "revenueCAGR5Y";
 
 export type SortDirection = "asc" | "desc";
 

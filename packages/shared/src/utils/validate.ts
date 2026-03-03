@@ -50,6 +50,12 @@ export const screenerSortFieldSchema = z.enum([
   "week52Low",
   "pctFrom52WeekHigh",
   "pctFrom52WeekLow",
+  "operatingCashFlow",
+  "priceToOCF",
+  "netDebt",
+  "netDebtToOCF",
+  "equityToMarketCap",
+  "revenueCAGR5Y",
 ]);
 
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -103,6 +109,14 @@ export const screenerFiltersSchema = z.object({
   // Technical / relative
   pctFrom52WeekHigh: rangeFilterSchema.optional(),
   pctFrom52WeekLow: rangeFilterSchema.optional(),
+
+  // Cash-flow & debt metrics
+  operatingCashFlow: rangeFilterSchema.optional(),
+  priceToOCF: rangeFilterSchema.optional(),
+  netDebt: rangeFilterSchema.optional(),
+  netDebtToOCF: rangeFilterSchema.optional(),
+  equityToMarketCap: rangeFilterSchema.optional(),
+  revenueCAGR5Y: rangeFilterSchema.optional(),
 
   // Analyst & ownership
   targetPrice: rangeFilterSchema.optional(),

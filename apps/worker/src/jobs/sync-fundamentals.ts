@@ -95,13 +95,59 @@ export async function runSyncFundamentals(
               ? totalDebt / totalEquity
               : null;
 
-          // Derive FCF from latest quarterly cash flow
+          // Derive FCF + Operating CF from latest quarterly cash flow
           const latestQCF = Object.values(
             data.Financials?.Cash_Flow?.quarterly ?? {},
           )[0];
           const fcf = latestQCF ? parseNum(latestQCF.freeCashFlow) : null;
           const fcfYield =
             fcf != null && mktCap != null && mktCap > 0 ? fcf / mktCap : null;
+          const operatingCashFlow = latestQCF
+            ? parseNum(latestQCF.totalCashFromOperatingActivities)
+            : null;
+
+          // Derive cash from latest quarterly balance sheet
+          const cashAndEquiv = latestQBS
+            ? parseNum(latestQBS.cashAndShortTermInvestments)
+            : null;
+
+          // Compute derived Pikpik metrics
+          const netDebt =
+            totalDebt != null && cashAndEquiv != null
+              ? totalDebt - cashAndEquiv
+              : null;
+          const priceToOCF =
+            mktCap != null && operatingCashFlow != null && operatingCashFlow > 0
+              ? mktCap / operatingCashFlow
+              : null;
+          const netDebtToOCF =
+            netDebt != null && operatingCashFlow != null && operatingCashFlow > 0
+              ? netDebt / operatingCashFlow
+              : null;
+          const equityToMarketCap =
+            totalEquity != null && mktCap != null && mktCap > 0
+              ? totalEquity / mktCap
+              : null;
+
+          // Compute 5-year revenue CAGR from quarterly fundamentals (TTM approach)
+          let revenueCAGR5Y: number | null = null;
+          try {
+            const quarters = await prisma.fundamentals.findMany({
+              where: { stockId: stock.id, type: "quarterly" },
+              orderBy: { date: "desc" },
+              select: { revenue: true },
+              take: 24,
+            });
+            if (quarters.length >= 20) {
+              const latestTTM = quarters.slice(0, 4).reduce((s, f) => s + (f.revenue ?? 0), 0);
+              const oldTTM = quarters.slice(16, 20).reduce((s, f) => s + (f.revenue ?? 0), 0);
+              if (latestTTM > 0 && oldTTM > 0) {
+                revenueCAGR5Y = Math.pow(latestTTM / oldTTM, 1 / 4) - 1;
+              }
+            }
+          } catch {
+            // Skip CAGR if query fails
+          }
 
           // Update denormalized fields on Stock
           await prisma.stock.update({
@@ -138,6 +184,15 @@ export async function runSyncFundamentals(
               ebitda,
               freeCashFlow: fcf,
               fcfYield,
+              operatingCashFlow,
+              totalDebt,
+              cashAndEquiv,
+              totalEquity,
+              netDebt,
+              priceToOCF,
+              netDebtToOCF,
+              equityToMarketCap,
+              revenueCAGR5Y,
               currentRatio,
               debtToEquity,
               targetPrice: data.Highlights.WallStreetTargetPrice,
