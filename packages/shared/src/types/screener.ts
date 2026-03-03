@@ -67,6 +67,9 @@ export interface ScreenerFilters {
   equityToMarketCap?: RangeFilter;
   revenueCAGR5Y?: RangeFilter;
 
+  // Quality score
+  qualityScore?: RangeFilter;
+
   // Analyst & ownership
   targetPrice?: RangeFilter;
   pctInsiders?: RangeFilter;
@@ -110,7 +113,8 @@ export type ScreenerSortField =
   | "netDebt"
   | "netDebtToOCF"
   | "equityToMarketCap"
-  | "revenueCAGR5Y";
+  | "revenueCAGR5Y"
+  | "qualityScore";
 
 export type SortDirection = "asc" | "desc";
 

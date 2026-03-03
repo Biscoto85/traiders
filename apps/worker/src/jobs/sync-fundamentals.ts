@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { EODHDClient } from "@stock-screener/eodhd-client";
+import { computeQualityScore } from "../scoring.js";
 
 const BATCH_LIMIT = 1500; // max stocks per exchange per run
 const STALE_DAYS = 7;
@@ -218,6 +219,21 @@ export async function runSyncFundamentals(
             // Skip CAGR if query fails
           }
 
+          // Compute quality score
+          const qualityScore = computeQualityScore({
+            roe: data.Highlights.ReturnOnEquityTTM,
+            netMargin: data.Highlights.ProfitMargin,
+            revenueGrowth: data.Highlights.QuarterlyRevenueGrowthYOY,
+            revenueCAGR5Y,
+            earningsGrowth: data.Highlights.QuarterlyEarningsGrowthYOY,
+            debtToEquity,
+            currentRatio,
+            peRatio: data.Valuation.TrailingPE,
+            fcfYield,
+            priceToOCF,
+            netDebtToOCF,
+          });
+
           // Update denormalized fields on Stock
           await prisma.stock.update({
             where: { id: stock.id },
@@ -264,6 +280,7 @@ export async function runSyncFundamentals(
               revenueCAGR5Y,
               currentRatio,
               debtToEquity,
+              qualityScore,
               targetPrice: data.Highlights.WallStreetTargetPrice,
               pctInsiders: data.SharesStats?.PercentInsiders ?? null,
               pctInstitutions: data.SharesStats?.PercentInstitutions ?? null,

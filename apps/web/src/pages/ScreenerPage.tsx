@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { api, type StockSummary, type FilterOptions, type Preset } from "@/lib/api";
 import { formatMarketCap, formatPercent, formatRatio, DEFAULT_PRESETS } from "@stock-screener/shared";
 
-type SortField = "marketCap" | "peRatio" | "dividendYield" | "lastPrice" | "revenueGrowth" | "ticker";
+type SortField = "marketCap" | "peRatio" | "dividendYield" | "lastPrice" | "revenueGrowth" | "ticker" | "qualityScore";
 type SortDir = "asc" | "desc";
 type FilterLogic = "AND" | "OR";
 type Operator = ">" | ">=" | "<" | "<=" | "=" | "entre";
@@ -68,6 +68,8 @@ const CRITERIA_OPTIONS: Array<{
   { key: "netDebt", label: "Dette nette", category: "Cash-flow", isCurrency: true },
   { key: "netDebtToOCF", label: "Dette nette / CF Oper.", category: "Cash-flow", hint: "ex: 0 - 5" },
   { key: "equityToMarketCap", label: "Equity / Capi", category: "Cash-flow", hint: "ex: 0.2 - 1", isPercent: true },
+  // Quality
+  { key: "qualityScore", label: "Score Qualite", category: "Score", hint: "ex: 60 - 100" },
   // Risk
   { key: "beta", label: "Beta", category: "Risque", hint: "ex: 0.5 - 1.5" },
   { key: "debtToEquity", label: "Debt/Equity", category: "Risque", hint: "ex: 0 - 1.5" },
@@ -1213,6 +1215,7 @@ export default function ScreenerPage() {
               <th className="text-right" onClick={() => handleSort("peRatio")}>P/E{sortIndicator("peRatio")}</th>
               <th className="text-right" onClick={() => handleSort("dividendYield")}>Div. Yield{sortIndicator("dividendYield")}</th>
               <th className="text-right" onClick={() => handleSort("revenueGrowth")}>Rev. Growth{sortIndicator("revenueGrowth")}</th>
+              <th className="text-right" onClick={() => handleSort("qualityScore")} title="Score Qualite Pikpik (0-100)">Score{sortIndicator("qualityScore")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1238,11 +1241,21 @@ export default function ScreenerPage() {
                 <td className={`text-right ${(stock.revenueGrowth ?? 0) >= 0 ? "text-success" : "text-danger"}`}>
                   {formatPercent(stock.revenueGrowth)}
                 </td>
+                <td className="text-right">
+                  {stock.qualityScore != null ? (
+                    <span style={{
+                      fontWeight: 600,
+                      color: stock.qualityScore >= 70 ? "var(--success)" : stock.qualityScore >= 45 ? "var(--warning)" : "var(--danger)",
+                    }}>
+                      {stock.qualityScore}
+                    </span>
+                  ) : "—"}
+                </td>
               </tr>
             ))}
             {!loading && stocks.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
                   Aucun resultat pour ces criteres
                 </td>
               </tr>

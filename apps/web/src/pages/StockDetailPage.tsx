@@ -4,7 +4,7 @@ import { api, type StockDetail, type PriceBar, type FundamentalPeriod } from "@/
 import { formatMarketCap, formatPercent, formatRatio } from "@stock-screener/shared";
 
 function compactNumber(n: number | null): string {
-  if (n == null) return "—";
+  if (n == null) return "\u2014";
   const abs = Math.abs(n);
   if (abs >= 1e12) return `${(n / 1e12).toFixed(1)}T`;
   if (abs >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
@@ -17,6 +17,273 @@ function pctColor(v: number | null): string {
   if (v == null) return "";
   return v >= 0 ? "text-success" : "text-danger";
 }
+
+// ── Score sub-category computation (mirrors worker/scoring.ts) ──
+
+function scoreUp(value: number | null | undefined, thresholds: [number, number, number, number]): number | null {
+  if (value == null || isNaN(value)) return null;
+  const [t3, t6, t8, t10] = thresholds;
+  if (value >= t10) return 10;
+  if (value >= t8) return 8;
+  if (value >= t6) return 6;
+  if (value >= t3) return 3;
+  return 0;
+}
+
+function scoreDown(value: number | null | undefined, thresholds: [number, number, number, number]): number | null {
+  if (value == null || isNaN(value)) return null;
+  const [t10, t8, t6, t3] = thresholds;
+  if (value <= t10) return 10;
+  if (value <= t8) return 8;
+  if (value <= t6) return 6;
+  if (value <= t3) return 3;
+  return 0;
+}
+
+function scorePeRatio(pe: number | null | undefined): number | null {
+  if (pe == null || isNaN(pe)) return null;
+  if (pe <= 0) return 0;
+  if (pe <= 10) return 10;
+  if (pe <= 15) return 8;
+  if (pe <= 20) return 6;
+  if (pe <= 30) return 3;
+  return 0;
+}
+
+interface SubScores {
+  rentabilite: number | null;
+  croissance: number | null;
+  sante: number | null;
+  valorisation: number | null;
+  cashFlow: number | null;
+}
+
+function computeSubScores(stock: StockDetail): SubScores {
+  const avg = (a: number | null, b: number | null): number | null => {
+    if (a != null && b != null) return (a + b) / 2 * 2;
+    if (a != null) return a * 2;
+    if (b != null) return b * 2;
+    return null;
+  };
+
+  const roe = scoreUp(stock.roe, [0.05, 0.10, 0.15, 0.20]);
+  const margin = scoreUp(stock.netMargin, [0.05, 0.10, 0.15, 0.20]);
+  const rentabilite = avg(roe, margin);
+
+  const revGrowth = scoreUp(stock.revenueGrowth, [0.05, 0.10, 0.15, 0.25]);
+  const earnGrowth = scoreUp(stock.earningsGrowth, [0.03, 0.08, 0.12, 0.20]);
+  const croissance = avg(revGrowth, earnGrowth);
+
+  const debtEq = scoreDown(stock.debtToEquity, [0.3, 0.5, 1.0, 2.0]);
+  const curRatio = scoreUp(stock.currentRatio, [1.0, 1.2, 1.5, 2.0]);
+  const sante = avg(debtEq, curRatio);
+
+  const pe = scorePeRatio(stock.peRatio);
+  const fcfY = scoreUp(stock.fcfYield, [0.01, 0.03, 0.05, 0.08]);
+  const valorisation = avg(pe, fcfY);
+
+  const pOcf = scoreDown(stock.priceToOCF, [8, 12, 18, 25]);
+  let ndOcf = scoreDown(stock.netDebtToOCF, [1, 2, 3, 5]);
+  if (stock.netDebtToOCF != null && stock.netDebtToOCF < 0) ndOcf = 10;
+  const cashFlow = avg(pOcf, ndOcf);
+
+  return { rentabilite, croissance, sante, valorisation, cashFlow };
+}
+
+// ── Radar Chart (SVG) ──
+
+function RadarChart({ scores }: { scores: SubScores }) {
+  const labels = ["Rentabilite", "Croissance", "Sante fin.", "Valorisation", "Cash Flow"];
+  const values = [scores.rentabilite, scores.croissance, scores.sante, scores.valorisation, scores.cashFlow];
+
+  const cx = 120, cy = 120, maxR = 90;
+  const n = 5;
+  const angleStep = (2 * Math.PI) / n;
+  const startAngle = -Math.PI / 2;
+
+  // Pentagon vertices at each level (0, 5, 10, 15, 20)
+  const levels = [5, 10, 15, 20];
+
+  function getPoint(i: number, val: number): [number, number] {
+    const angle = startAngle + i * angleStep;
+    const r = (val / 20) * maxR;
+    return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+  }
+
+  const gridPaths = levels.map((level) => {
+    const pts = Array.from({ length: n }, (_, i) => getPoint(i, level));
+    return pts.map((p) => `${p[0]},${p[1]}`).join(" ");
+  });
+
+  const dataPoints = values.map((v, i) => getPoint(i, v ?? 0));
+  const dataPath = dataPoints.map((p) => `${p[0]},${p[1]}`).join(" ");
+
+  const labelPositions = Array.from({ length: n }, (_, i) => {
+    const angle = startAngle + i * angleStep;
+    const r = maxR + 20;
+    return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+  });
+
+  return (
+    <svg viewBox="0 0 240 240" style={{ width: "100%", maxWidth: 260 }}>
+      {/* Grid */}
+      {gridPaths.map((path, i) => (
+        <polygon key={i} points={path} fill="none" stroke="var(--bg-input)" strokeWidth="1" />
+      ))}
+      {/* Axes */}
+      {Array.from({ length: n }, (_, i) => {
+        const [x, y] = getPoint(i, 20);
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--bg-input)" strokeWidth="1" />;
+      })}
+      {/* Data polygon */}
+      <polygon points={dataPath} fill="var(--primary)" fillOpacity="0.25" stroke="var(--primary)" strokeWidth="2" />
+      {/* Data points */}
+      {dataPoints.map(([x, y], i) => (
+        values[i] != null && <circle key={i} cx={x} cy={y} r="3.5" fill="var(--primary)" />
+      ))}
+      {/* Labels */}
+      {labelPositions.map(([x, y], i) => (
+        <text
+          key={i}
+          x={x}
+          y={y}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize="10"
+          fill="var(--text-muted)"
+        >
+          {labels[i]}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+// ── Score Badge ──
+
+function scoreColor(score: number): string {
+  if (score >= 70) return "var(--success)";
+  if (score >= 45) return "var(--warning)";
+  return "var(--danger)";
+}
+
+function scoreLabel(score: number): string {
+  if (score >= 80) return "Excellent";
+  if (score >= 70) return "Tres bon";
+  if (score >= 55) return "Bon";
+  if (score >= 45) return "Moyen";
+  if (score >= 30) return "Faible";
+  return "Risque";
+}
+
+// ── Fundamental Bar Chart (CSS-based) ──
+
+function FundamentalChart({ data, title }: { data: FundamentalPeriod[]; title: string }) {
+  if (data.length < 2) return null;
+
+  // Show revenue and net income side by side
+  const reversed = [...data].reverse(); // Oldest first
+  const allVals = reversed.flatMap((f) => [f.revenue, f.netIncome, f.freeCashFlow].filter((v) => v != null) as number[]);
+  if (allVals.length === 0) return null;
+
+  const maxVal = Math.max(...allVals.map(Math.abs));
+
+  return (
+    <div className="card" style={{ padding: "1rem", marginBottom: "1.5rem" }}>
+      <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem" }}>{title}</div>
+      <div style={{ display: "flex", alignItems: "flex-end", height: 140, gap: 2 }}>
+        {reversed.map((f) => {
+          const rev = f.revenue ?? 0;
+          const net = f.netIncome ?? 0;
+          const fcf = f.freeCashFlow ?? 0;
+          const revH = maxVal > 0 ? (Math.abs(rev) / maxVal) * 100 : 0;
+          const netH = maxVal > 0 ? (Math.abs(net) / maxVal) * 100 : 0;
+          const fcfH = maxVal > 0 ? (Math.abs(fcf) / maxVal) * 100 : 0;
+
+          return (
+            <div key={f.period} style={{ flex: 1, display: "flex", gap: 1, alignItems: "flex-end", height: "100%" }}>
+              <div
+                title={`Revenue: ${compactNumber(f.revenue)}`}
+                style={{ flex: 1, height: `${revH}%`, minHeight: 2, backgroundColor: "var(--primary)", opacity: 0.7, borderRadius: "1px 1px 0 0" }}
+              />
+              <div
+                title={`Net Income: ${compactNumber(f.netIncome)}`}
+                style={{ flex: 1, height: `${netH}%`, minHeight: 2, backgroundColor: net >= 0 ? "var(--success)" : "var(--danger)", opacity: 0.7, borderRadius: "1px 1px 0 0" }}
+              />
+              <div
+                title={`FCF: ${compactNumber(f.freeCashFlow)}`}
+                style={{ flex: 1, height: `${fcfH}%`, minHeight: 2, backgroundColor: fcf >= 0 ? "#9b59b6" : "var(--danger)", opacity: 0.6, borderRadius: "1px 1px 0 0" }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+        <span>{reversed[0]?.period}</span>
+        <span>{reversed[reversed.length - 1]?.period}</span>
+      </div>
+      <div style={{ display: "flex", gap: "1rem", fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--primary)", borderRadius: 1, marginRight: 3 }} />Revenue</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--success)", borderRadius: 1, marginRight: 3 }} />Net Income</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#9b59b6", borderRadius: 1, marginRight: 3 }} />FCF</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Margin Trend Chart (CSS-based) ──
+
+function MarginChart({ data }: { data: FundamentalPeriod[] }) {
+  if (data.length < 2) return null;
+
+  const reversed = [...data].reverse();
+  const margins = reversed.map((f) => ({
+    period: f.period,
+    gross: f.revenue && f.grossProfit ? f.grossProfit / f.revenue : null,
+    operating: f.revenue && f.operatingIncome ? f.operatingIncome / f.revenue : null,
+    net: f.revenue && f.netIncome ? f.netIncome / f.revenue : null,
+  }));
+
+  const allVals = margins.flatMap((m) => [m.gross, m.operating, m.net].filter((v) => v != null) as number[]);
+  if (allVals.length === 0) return null;
+
+  const maxMargin = Math.max(...allVals.map(Math.abs), 0.01);
+
+  return (
+    <div className="card" style={{ padding: "1rem", marginBottom: "1.5rem" }}>
+      <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem" }}>Marges trimestrielles</div>
+      <div style={{ display: "flex", alignItems: "flex-end", height: 120, gap: 2 }}>
+        {margins.map((m) => (
+          <div key={m.period} style={{ flex: 1, display: "flex", gap: 1, alignItems: "flex-end", height: "100%" }}>
+            <div
+              title={`Marge brute: ${formatPercent(m.gross)}`}
+              style={{ flex: 1, height: `${m.gross != null ? (Math.abs(m.gross) / maxMargin) * 100 : 0}%`, minHeight: 1, backgroundColor: "var(--primary)", opacity: 0.6, borderRadius: "1px 1px 0 0" }}
+            />
+            <div
+              title={`Marge op.: ${formatPercent(m.operating)}`}
+              style={{ flex: 1, height: `${m.operating != null ? (Math.abs(m.operating) / maxMargin) * 100 : 0}%`, minHeight: 1, backgroundColor: "var(--warning)", opacity: 0.7, borderRadius: "1px 1px 0 0" }}
+            />
+            <div
+              title={`Marge nette: ${formatPercent(m.net)}`}
+              style={{ flex: 1, height: `${m.net != null ? (Math.abs(m.net) / maxMargin) * 100 : 0}%`, minHeight: 1, backgroundColor: (m.net ?? 0) >= 0 ? "var(--success)" : "var(--danger)", opacity: 0.7, borderRadius: "1px 1px 0 0" }}
+            />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+        <span>{reversed[0]?.period}</span>
+        <span>{reversed[reversed.length - 1]?.period}</span>
+      </div>
+      <div style={{ display: "flex", gap: "1rem", fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--primary)", borderRadius: 1, marginRight: 3 }} />Brute</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--warning)", borderRadius: 1, marginRight: 3 }} />Operationnelle</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--success)", borderRadius: 1, marginRight: 3 }} />Nette</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────
 
 export default function StockDetailPage() {
   const { ticker } = useParams<{ ticker: string }>();
@@ -43,7 +310,7 @@ export default function StockDetailPage() {
     Promise.all([
       api.stock(ticker, exchange),
       api.prices(ticker, { from: fromDate, exchange }),
-      api.fundamentals(ticker, { type: "quarterly", limit: 8, exchange }),
+      api.fundamentals(ticker, { type: "quarterly", limit: 12, exchange }),
       api.bookmarkIds(),
     ])
       .then(([stockRes, pricesRes, fundRes, bmRes]) => {
@@ -78,12 +345,11 @@ export default function StockDetailPage() {
     }
   }
 
-  // Price sparkline (simple ASCII-like bar using CSS)
+  // Price sparkline
   const priceMin = prices.length ? Math.min(...prices.map((p) => p.low)) : 0;
   const priceMax = prices.length ? Math.max(...prices.map((p) => p.high)) : 1;
   const priceRange = priceMax - priceMin || 1;
 
-  // Price change 1Y
   const firstPrice = prices[0]?.adjClose ?? null;
   const lastPrice = stock.lastPrice;
   const priceChange1Y =
@@ -91,11 +357,12 @@ export default function StockDetailPage() {
       ? (lastPrice - firstPrice) / firstPrice
       : null;
 
-  // Target upside
   const targetUpside =
     stock.targetPrice != null && lastPrice != null && lastPrice !== 0
       ? (stock.targetPrice - lastPrice) / lastPrice
       : null;
+
+  const subScores = computeSubScores(stock);
 
   // ── Metric sections ──
   const valuationMetrics = [
@@ -131,7 +398,7 @@ export default function StockDetailPage() {
   ];
 
   const analystMetrics = [
-    { label: "Target Price", value: stock.targetPrice?.toFixed(2) ?? "—" },
+    { label: "Target Price", value: stock.targetPrice?.toFixed(2) ?? "\u2014" },
     { label: "Upside cible", value: formatPercent(targetUpside), className: pctColor(targetUpside) },
     { label: "% Insiders", value: formatPercent(stock.pctInsiders != null ? stock.pctInsiders / 100 : null) },
     { label: "% Institutions", value: formatPercent(stock.pctInstitutions != null ? stock.pctInstitutions / 100 : null) },
@@ -162,12 +429,12 @@ export default function StockDetailPage() {
             </span>
           </h2>
           <div style={{ fontSize: "0.875rem", color: "var(--text-muted)" }}>
-            {stock.sector ?? "—"} &middot; {stock.industry ?? "—"} &middot; {stock.currency}
+            {stock.sector ?? "\u2014"} &middot; {stock.industry ?? "\u2014"} &middot; {stock.currency}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: "2rem", fontWeight: 700 }}>
-            {lastPrice?.toFixed(2) ?? "—"} <span style={{ fontSize: "0.875rem", fontWeight: 400 }}>{stock.currency}</span>
+            {lastPrice?.toFixed(2) ?? "\u2014"} <span style={{ fontSize: "0.875rem", fontWeight: 400 }}>{stock.currency}</span>
           </div>
           <div style={{ fontSize: "0.875rem" }}>
             <span>Mkt Cap: {formatMarketCap(stock.marketCap)}</span>
@@ -177,7 +444,64 @@ export default function StockDetailPage() {
         </div>
       </div>
 
-      {/* Price mini-chart (CSS bars) */}
+      {/* Quality Score + Radar */}
+      {stock.qualityScore != null && (
+        <div className="card" style={{ padding: "1.25rem", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "2rem", flexWrap: "wrap" }}>
+            <div style={{ textAlign: "center", minWidth: 120 }}>
+              <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.5rem" }}>Score Pikpik</div>
+              <div style={{
+                fontSize: "2.5rem",
+                fontWeight: 800,
+                color: scoreColor(stock.qualityScore),
+                lineHeight: 1,
+              }}>
+                {stock.qualityScore}
+              </div>
+              <div style={{
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                color: scoreColor(stock.qualityScore),
+                marginTop: "0.25rem",
+              }}>
+                {scoreLabel(stock.qualityScore)}
+              </div>
+              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>/ 100</div>
+            </div>
+            <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+              <RadarChart scores={subScores} />
+            </div>
+            <div style={{ minWidth: 160 }}>
+              {[
+                { label: "Rentabilite", val: subScores.rentabilite },
+                { label: "Croissance", val: subScores.croissance },
+                { label: "Sante fin.", val: subScores.sante },
+                { label: "Valorisation", val: subScores.valorisation },
+                { label: "Cash Flow", val: subScores.cashFlow },
+              ].map((cat) => (
+                <div key={cat.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.375rem" }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{cat.label}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    <div style={{ width: 60, height: 6, background: "var(--bg-input)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{
+                        width: `${cat.val != null ? (cat.val / 20) * 100 : 0}%`,
+                        height: "100%",
+                        background: cat.val != null && cat.val >= 14 ? "var(--success)" : cat.val != null && cat.val >= 9 ? "var(--warning)" : "var(--danger)",
+                        borderRadius: 3,
+                      }} />
+                    </div>
+                    <span style={{ fontSize: "0.75rem", fontWeight: 600, width: 24, textAlign: "right" }}>
+                      {cat.val != null ? Math.round(cat.val) : "\u2014"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price mini-chart */}
       {prices.length > 0 && (
         <div className="card" style={{ padding: "1rem", marginBottom: "1.5rem" }}>
           <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem" }}>
@@ -222,7 +546,7 @@ export default function StockDetailPage() {
       <MetricSection title="Risque & Levier" metrics={riskMetrics} />
       <MetricSection title="Analyste & Actionnariat" metrics={analystMetrics} />
 
-      {/* 52-week position visual */}
+      {/* 52-week position */}
       <div className="card" style={{ padding: "1rem", marginBottom: "1.5rem" }}>
         <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem" }}>
           Position 52 semaines
@@ -254,6 +578,14 @@ export default function StockDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Fundamental charts */}
+      {fundamentals.length >= 2 && (
+        <>
+          <FundamentalChart data={fundamentals} title="Revenue / Net Income / FCF (trimestriel)" />
+          <MarginChart data={fundamentals} />
+        </>
+      )}
 
       {/* Quarterly fundamentals table */}
       {fundamentals.length > 0 && (

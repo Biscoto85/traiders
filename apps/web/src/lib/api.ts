@@ -233,6 +233,7 @@ export interface StockSummary {
   week52High: number | null;
   week52Low: number | null;
   beta: number | null;
+  qualityScore: number | null;
 }
 
 export interface StockDetail extends StockSummary {
@@ -256,6 +257,15 @@ export interface StockDetail extends StockSummary {
   ebitda: number | null;
   freeCashFlow: number | null;
   fcfYield: number | null;
+  operatingCashFlow: number | null;
+  totalDebt: number | null;
+  cashAndEquiv: number | null;
+  totalEquity: number | null;
+  netDebt: number | null;
+  priceToOCF: number | null;
+  netDebtToOCF: number | null;
+  equityToMarketCap: number | null;
+  revenueCAGR5Y: number | null;
   targetPrice: number | null;
   pctInsiders: number | null;
   pctInstitutions: number | null;

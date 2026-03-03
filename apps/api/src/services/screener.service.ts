@@ -82,6 +82,8 @@ export function buildScreenerQuery(
     ["netDebtToOCF", "netDebtToOCF"],
     ["equityToMarketCap", "equityToMarketCap"],
     ["revenueCAGR5Y", "revenueCAGR5Y"],
+    // Quality score
+    ["qualityScore", "qualityScore"],
     // Analyst & ownership
     ["targetPrice", "targetPrice"],
     ["pctInsiders", "pctInsiders"],
@@ -154,6 +156,7 @@ export function buildScreenerQuery(
     netDebtToOCF: "netDebtToOCF",
     equityToMarketCap: "equityToMarketCap",
     revenueCAGR5Y: "revenueCAGR5Y",
+    qualityScore: "qualityScore",
   };
 
   const orderByField = fieldMapping[sortField] ?? "marketCap";
@@ -205,6 +208,7 @@ const SCREENER_SELECT = {
   netDebtToOCF: true,
   equityToMarketCap: true,
   revenueCAGR5Y: true,
+  qualityScore: true,
   targetPrice: true,
   priceUpdatedAt: true,
 } as const;
