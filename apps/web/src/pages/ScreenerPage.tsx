@@ -58,6 +58,15 @@ const CRITERIA_OPTIONS: Array<{
   { key: "shortPctFloat", label: "% Short Float", category: "Analyste", isPercent: true },
 ];
 
+// Geographic zones — group exchanges for quick filtering
+const GEOGRAPHIC_ZONES: Record<string, string[]> = {
+  "Amerique du Nord": ["US", "TO", "V", "MX"],
+  "Europe": ["PA", "AS", "BR", "LI", "LSE", "XETRA", "F", "MI", "MC", "SW", "VI", "OL", "ST", "CO", "HE", "WAR", "AT", "IS"],
+  "Asie-Pacifique": ["TSE", "HKEX", "SHG", "SHE", "KO", "TW", "BSE", "NSE", "AU", "NZ", "SG", "BK", "JK", "KL"],
+  "Moyen-Orient / Afrique": ["TA", "SAU", "JSE"],
+  "Amerique du Sud": ["SA", "SN", "BA"],
+};
+
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const PAGE_SIZE = 50;
 
@@ -82,6 +91,7 @@ export default function ScreenerPage() {
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
 
   // Classification filters (dropdowns)
+  const [zone, setZone] = useState("");
   const [exchange, setExchange] = useState("");
   const [sector, setSector] = useState("");
   const [country, setCountry] = useState("");
@@ -114,10 +124,14 @@ export default function ScreenerPage() {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [togglingBookmark, setTogglingBookmark] = useState<string | null>(null);
 
-  // Save preset
+  // Save / edit preset
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+
+  // Expanded preset (show criteria detail)
+  const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
   // Apply incoming preset state
   useEffect(() => {
@@ -163,7 +177,11 @@ export default function ScreenerPage() {
     setLoading(true);
     try {
       const filters: Record<string, unknown> = { ...rangeFilters };
-      if (exchange) filters.exchanges = [exchange];
+      if (exchange) {
+        filters.exchanges = [exchange];
+      } else if (zone && GEOGRAPHIC_ZONES[zone]) {
+        filters.exchanges = GEOGRAPHIC_ZONES[zone];
+      }
       if (sector) filters.sectors = [sector];
       if (country) filters.countries = [country];
 
@@ -184,7 +202,7 @@ export default function ScreenerPage() {
     } finally {
       setLoading(false);
     }
-  }, [exchange, sector, country, sortField, sortDir, rangeFilters, currentPage, activeLetter]);
+  }, [zone, exchange, sector, country, sortField, sortDir, rangeFilters, currentPage, activeLetter]);
 
   useEffect(() => {
     fetchStocks();
@@ -213,12 +231,14 @@ export default function ScreenerPage() {
   function clearPreset() {
     setRangeFilters({});
     setPresetName(null);
+    setZone("");
     setExchange("");
     setSector("");
     setCountry("");
     setSortField("marketCap");
     setSortDir("desc");
     setActiveLetter(null);
+    setEditingPresetId(null);
     resetPage();
   }
 
@@ -302,19 +322,50 @@ export default function ScreenerPage() {
       if (sector) filters.sectors = [sector];
       if (country) filters.countries = [country];
 
-      const res = await api.createPreset({
-        name: saveName.trim(),
-        filters,
-        sort: { field: sortField, direction: sortDir },
-        isPublic: false,
-      });
-      setUserPresets((prev) => [res.data, ...prev]);
+      if (editingPresetId) {
+        // Update existing preset
+        const res = await api.updatePreset(editingPresetId, {
+          name: saveName.trim(),
+          filters,
+          sort: { field: sortField, direction: sortDir },
+        });
+        setUserPresets((prev) => prev.map((p) => (p.id === editingPresetId ? res.data : p)));
+        setEditingPresetId(null);
+      } else {
+        // Create new preset
+        const res = await api.createPreset({
+          name: saveName.trim(),
+          filters,
+          sort: { field: sortField, direction: sortDir },
+          isPublic: false,
+        });
+        setUserPresets((prev) => [res.data, ...prev]);
+      }
       setSaveName("");
       setShowSave(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erreur");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startEditPreset(preset: Preset) {
+    applyPreset(preset.filters, preset.sort, preset.name);
+    setEditingPresetId(preset.id);
+    setSaveName(preset.name);
+    setShowSave(true);
+    setShowPresets(false);
+  }
+
+  async function handleDeletePreset(id: string) {
+    if (!confirm("Supprimer ce preset ?")) return;
+    try {
+      await api.deletePreset(id);
+      setUserPresets((prev) => prev.filter((p) => p.id !== id));
+      if (editingPresetId === id) setEditingPresetId(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erreur");
     }
   }
 
@@ -335,7 +386,12 @@ export default function ScreenerPage() {
     }
   }
 
-  const hasActiveFilters = Object.keys(rangeFilters).length > 0 || exchange || sector || country;
+  const hasActiveFilters = Object.keys(rangeFilters).length > 0 || exchange || sector || country || zone;
+
+  // Exchanges filtered by zone
+  const filteredExchanges = zone
+    ? filterOptions?.exchanges.filter((ex) => GEOGRAPHIC_ZONES[zone]?.includes(ex.id)) ?? []
+    : filterOptions?.exchanges ?? [];
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   // Available criteria (exclude already-added ones)
@@ -410,9 +466,9 @@ export default function ScreenerPage() {
               <button
                 className="btn btn-ghost"
                 style={{ fontSize: "0.75rem" }}
-                onClick={() => setShowSave(true)}
+                onClick={() => { setShowSave(true); if (!editingPresetId) setSaveName(""); }}
               >
-                Sauvegarder
+                {editingPresetId ? "Modifier le preset" : "Sauvegarder"}
               </button>
             )}
           </>
@@ -433,16 +489,57 @@ export default function ScreenerPage() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
                   {userPresets.map((p) => (
-                    <button
-                      key={p.id}
-                      className="preset-item"
-                      onClick={() => applyPreset(p.filters, p.sort, p.name)}
-                    >
-                      <strong>{p.name}</strong>
-                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                        {Object.keys(p.filters).length} criteres
-                      </span>
-                    </button>
+                    <div key={p.id} className="preset-item-wrapper">
+                      <div className="preset-item" style={{ cursor: "default" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                          <div style={{ flex: 1, cursor: "pointer" }} onClick={() => applyPreset(p.filters, p.sort, p.name)}>
+                            <strong>{p.name}</strong>
+                            <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginLeft: "0.5rem" }}>
+                              {Object.keys(p.filters).length} criteres
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", gap: "0.25rem", flexShrink: 0 }}>
+                            <button
+                              className="btn-icon"
+                              title="Voir les criteres"
+                              onClick={(e) => { e.stopPropagation(); setExpandedPreset(expandedPreset === p.id ? null : p.id); }}
+                            >
+                              {expandedPreset === p.id ? "\u25B2" : "\u25BC"}
+                            </button>
+                            <button
+                              className="btn-icon"
+                              title="Editer"
+                              onClick={(e) => { e.stopPropagation(); startEditPreset(p); }}
+                            >
+                              \u270E
+                            </button>
+                            <button
+                              className="btn-icon btn-icon-danger"
+                              title="Supprimer"
+                              onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id); }}
+                            >
+                              \u2715
+                            </button>
+                          </div>
+                        </div>
+                        {expandedPreset === p.id && (
+                          <div className="preset-criteria">
+                            {Object.entries(p.filters).map(([key, val]) => {
+                              const v = val as { min?: number; max?: number } | string[];
+                              if (Array.isArray(v)) {
+                                return <span key={key} className="filter-pill">{key}: {v.join(", ")}</span>;
+                              }
+                              const parts: string[] = [];
+                              if (v && typeof v === "object") {
+                                if (v.min !== undefined) parts.push(`>=${formatFilterNum(v.min)}`);
+                                if (v.max !== undefined) parts.push(`<=${formatFilterNum(v.max)}`);
+                              }
+                              return <span key={key} className="filter-pill">{criteriaLabel(key)} {parts.join(" ")}</span>;
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -454,16 +551,36 @@ export default function ScreenerPage() {
               </h4>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
                 {DEFAULT_PRESETS.map((dp) => (
-                  <button
-                    key={dp.name}
-                    className="preset-item"
-                    onClick={() => applyPreset(dp.filters as Record<string, unknown>, dp.sort as Record<string, unknown>, dp.name)}
-                  >
-                    <strong>{dp.name}</strong>
-                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                      {dp.description}
-                    </span>
-                  </button>
+                  <div key={dp.name} className="preset-item-wrapper">
+                    <div className="preset-item" style={{ cursor: "default" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                        <div style={{ flex: 1, cursor: "pointer" }} onClick={() => applyPreset(dp.filters as Record<string, unknown>, dp.sort as Record<string, unknown>, dp.name)}>
+                          <strong>{dp.name}</strong>
+                        </div>
+                        <button
+                          className="btn-icon"
+                          title="Voir les criteres"
+                          onClick={(e) => { e.stopPropagation(); setExpandedPreset(expandedPreset === dp.name ? null : dp.name); }}
+                        >
+                          {expandedPreset === dp.name ? "\u25B2" : "\u25BC"}
+                        </button>
+                      </div>
+                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                        {dp.description}
+                      </span>
+                      {expandedPreset === dp.name && (
+                        <div className="preset-criteria">
+                          {Object.entries(dp.filters).map(([key, val]) => {
+                            const v = val as { min?: number; max?: number };
+                            const parts: string[] = [];
+                            if (v.min !== undefined) parts.push(`>=${formatFilterNum(v.min)}`);
+                            if (v.max !== undefined) parts.push(`<=${formatFilterNum(v.max)}`);
+                            return <span key={key} className="filter-pill">{criteriaLabel(key)} {parts.join(" ")}</span>;
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -541,10 +658,19 @@ export default function ScreenerPage() {
       {/* Filters bar */}
       <div className="filters-bar">
         <div className="filter-group">
+          <label>Zone</label>
+          <select className="filter-select" value={zone} onChange={(e) => { setZone(e.target.value); setExchange(""); resetPage(); }}>
+            <option value="">Toutes</option>
+            {Object.keys(GEOGRAPHIC_ZONES).map((z) => (
+              <option key={z} value={z}>{z}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-group">
           <label>Exchange</label>
           <select className="filter-select" value={exchange} onChange={(e) => { setExchange(e.target.value); resetPage(); }}>
-            <option value="">Tous</option>
-            {filterOptions?.exchanges.map((ex) => (
+            <option value="">{zone ? `Tous (${zone})` : "Tous"}</option>
+            {filteredExchanges.map((ex) => (
               <option key={ex.id} value={ex.id}>{ex.name}</option>
             ))}
           </select>
