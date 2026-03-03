@@ -124,7 +124,32 @@ async function main() {
     job.start();
   }
 
+  // ── Run initial sync on first startup (BEFORE starting poll) ──
+  const isFirstRun = !(await prisma.syncJob.findUnique({
+    where: { jobName: "sync-tickers" },
+  }));
+
+  if (isFirstRun) {
+    // Clear any pending manual triggers to avoid race conditions
+    await prisma.systemConfig.deleteMany({ where: { key: "PENDING_SYNC" } });
+
+    const initialMode = await getSyncMode(prisma);
+    console.log("First run detected — starting initial data sync...");
+    console.log("Step 1/3: Syncing ticker lists...");
+    await runSyncTickers(prisma, eodhd, config.exchanges);
+    console.log("Step 2/3: Syncing EOD prices...");
+    await runSyncEod(prisma, eodhd, config.exchanges);
+    if (initialMode === "full") {
+      console.log("Step 3/3: Syncing fundamentals (this may take a while)...");
+      await runSyncFundamentals(prisma, eodhd, config.exchanges);
+    } else {
+      console.log("Step 3/3: Fundamentals skipped (SYNC_MODE=daily). Switch to 'full' from admin to enable.");
+    }
+    console.log("Initial sync complete!");
+  }
+
   // ── Poll for manual sync triggers (every 15s) ──
+  // Started AFTER initial sync to avoid race conditions
   let manualSyncRunning = false;
 
   const pollInterval = setInterval(async () => {
@@ -162,27 +187,6 @@ async function main() {
       manualSyncRunning = false;
     }
   }, 15_000);
-
-  // ── Run initial sync on first startup ──
-  const isFirstRun = !(await prisma.syncJob.findUnique({
-    where: { jobName: "sync-tickers" },
-  }));
-
-  if (isFirstRun) {
-    const initialMode = await getSyncMode(prisma);
-    console.log("First run detected — starting initial data sync...");
-    console.log("Step 1/3: Syncing ticker lists...");
-    await runSyncTickers(prisma, eodhd, config.exchanges);
-    console.log("Step 2/3: Syncing EOD prices...");
-    await runSyncEod(prisma, eodhd, config.exchanges);
-    if (initialMode === "full") {
-      console.log("Step 3/3: Syncing fundamentals (this may take a while)...");
-      await runSyncFundamentals(prisma, eodhd, config.exchanges);
-    } else {
-      console.log("Step 3/3: Fundamentals skipped (SYNC_MODE=daily). Switch to 'full' from admin to enable.");
-    }
-    console.log("Initial sync complete!");
-  }
 
   console.log("Worker running. Press Ctrl+C to stop.");
 

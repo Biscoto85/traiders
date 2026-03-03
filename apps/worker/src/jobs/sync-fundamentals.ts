@@ -78,15 +78,21 @@ export async function runSyncFundamentals(
           const mktCap = data.Highlights.MarketCapitalization;
           const ebitda = data.Highlights.EBITDA;
 
-          // Derive current ratio from latest quarterly balance sheet
+          // Derive ratios from latest quarterly balance sheet
           const latestQBS = Object.values(
             data.Financials?.Balance_Sheet?.quarterly ?? {},
           )[0];
           const curAssets = latestQBS ? parseNum(latestQBS.totalCurrentAssets) : null;
           const curLiab = latestQBS ? parseNum(latestQBS.totalCurrentLiabilities) : null;
+          const totalDebt = latestQBS ? parseNum(latestQBS.longTermDebt) : null;
+          const totalEquity = latestQBS ? parseNum(latestQBS.totalStockholderEquity) : null;
           const currentRatio =
             curAssets != null && curLiab != null && curLiab !== 0
               ? curAssets / curLiab
+              : null;
+          const debtToEquity =
+            totalDebt != null && totalEquity != null && totalEquity !== 0
+              ? totalDebt / totalEquity
               : null;
 
           // Derive FCF from latest quarterly cash flow
@@ -133,6 +139,7 @@ export async function runSyncFundamentals(
               freeCashFlow: fcf,
               fcfYield,
               currentRatio,
+              debtToEquity,
               targetPrice: data.Highlights.WallStreetTargetPrice,
               pctInsiders: data.SharesStats?.PercentInsiders ?? null,
               pctInstitutions: data.SharesStats?.PercentInstitutions ?? null,
