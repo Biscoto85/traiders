@@ -71,7 +71,7 @@ async function main() {
         console.log("[sync-fundamentals] Skipped — SYNC_MODE is 'daily'. Switch to 'full' (All-in-One plan) to enable.");
         return;
       }
-      runSyncFundamentals(prisma, eodhd, config.exchanges).catch((err) =>
+      runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync).catch((err) =>
         console.error("Fundamentals sync cron error:", err),
       );
     },
@@ -141,7 +141,7 @@ async function main() {
     await runSyncEod(prisma, eodhd, config.exchanges);
     if (initialMode === "full") {
       console.log("Step 3/3: Syncing fundamentals (this may take a while)...");
-      await runSyncFundamentals(prisma, eodhd, config.exchanges);
+      await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync);
     } else {
       console.log("Step 3/3: Fundamentals skipped (SYNC_MODE=daily). Switch to 'full' from admin to enable.");
     }
@@ -174,7 +174,7 @@ async function main() {
           await runSyncTickers(prisma, eodhd, config.exchanges);
           break;
         case "sync-fundamentals":
-          await runSyncFundamentals(prisma, eodhd, config.exchanges);
+          await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync);
           break;
         default:
           console.warn(`[manual-trigger] Unknown job: ${jobName}`);

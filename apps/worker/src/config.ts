@@ -51,6 +51,13 @@ export const config = {
   /** Exchanges to sync. Add more as needed. */
   exchanges: optionalEnv("SYNC_EXCHANGES", "US").split(","),
 
+  sync: {
+    /** Skip stocks with known marketCap below this threshold (saves 10 API calls each). */
+    minMarketCap: parseInt(optionalEnv("SYNC_MIN_MARKET_CAP", "50000000"), 10),
+    /** Max API calls per fundamentals run. EODHD limit is 100K/day — keep margin. */
+    maxApiCalls: parseInt(optionalEnv("SYNC_MAX_API_CALLS", "90000"), 10),
+  },
+
   appUrl: optionalEnv("WEB_URL", "http://localhost:5173"),
 
   smtp: {
