@@ -12,6 +12,7 @@ import { presetRoutes } from "./routes/presets.js";
 import { adminRoutes } from "./routes/admin.js";
 import { emailDigestRoutes } from "./routes/email-digests.js";
 import { bookmarkRoutes } from "./routes/bookmarks.js";
+import { alertRoutes } from "./routes/alerts.js";
 
 async function main() {
   const fastify = Fastify({
@@ -44,6 +45,7 @@ async function main() {
     await instance.register(presetRoutes, { prefix: "/api/v1" });
     await instance.register(emailDigestRoutes, { prefix: "/api/v1" });
     await instance.register(bookmarkRoutes, { prefix: "/api/v1" });
+    await instance.register(alertRoutes, { prefix: "/api/v1" });
     await instance.register(adminRoutes, { prefix: "/api/v1" });
   });
 

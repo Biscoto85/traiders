@@ -161,6 +161,31 @@ export const api = {
   removeBookmark: (stockId: string) =>
     request<{ success: true; data: null }>(`/bookmarks/${stockId}`, { method: "DELETE" }),
 
+  // Alerts
+  alerts: () =>
+    request<{ success: true; data: AlertData[] }>("/alerts"),
+
+  createAlert: (body: { stockId: string; metric: string; operator: string; threshold: number }) =>
+    request<{ success: true; data: AlertData }>("/alerts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  toggleAlert: (id: string) =>
+    request<{ success: true; data: AlertData }>(`/alerts/${id}/toggle`, {
+      method: "PUT",
+      body: JSON.stringify({}),
+    }),
+
+  rearmAlert: (id: string) =>
+    request<{ success: true; data: AlertData }>(`/alerts/${id}/rearm`, {
+      method: "PUT",
+      body: JSON.stringify({}),
+    }),
+
+  deleteAlert: (id: string) =>
+    request<{ success: true; data: null }>(`/alerts/${id}`, { method: "DELETE" }),
+
   // Admin
   adminUsers: () =>
     request<{ success: true; data: AdminUser[] }>("/admin/users"),
@@ -378,6 +403,24 @@ export interface AdminUser {
   createdAt: string;
   updatedAt: string;
   _count: { presets: number; emailDigests: number };
+}
+
+export interface AlertData {
+  id: string;
+  stockId: string;
+  metric: string;
+  operator: string;
+  threshold: number;
+  isTriggered: boolean;
+  lastTriggeredAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  stock: {
+    ticker: string;
+    exchangeId: string;
+    name: string;
+    lastPrice: number | null;
+  };
 }
 
 export interface SyncJob {

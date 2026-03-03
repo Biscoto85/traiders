@@ -297,6 +297,12 @@ export default function StockDetailPage() {
   const [error, setError] = useState("");
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [togglingBookmark, setTogglingBookmark] = useState(false);
+  const [showAlertForm, setShowAlertForm] = useState(false);
+  const [alertMetric, setAlertMetric] = useState("lastPrice");
+  const [alertOperator, setAlertOperator] = useState("below");
+  const [alertThreshold, setAlertThreshold] = useState("");
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertMsg, setAlertMsg] = useState("");
 
   useEffect(() => {
     if (!ticker) return;
@@ -342,6 +348,50 @@ export default function StockDetailPage() {
       console.error("Bookmark error:", err);
     } finally {
       setTogglingBookmark(false);
+    }
+  }
+
+  const ALERT_METRICS = [
+    { value: "lastPrice", label: "Prix" },
+    { value: "marketCap", label: "Capitalisation" },
+    { value: "peRatio", label: "P/E Ratio" },
+    { value: "forwardPe", label: "Forward P/E" },
+    { value: "pbRatio", label: "P/B" },
+    { value: "psRatio", label: "P/S" },
+    { value: "evToEbitda", label: "EV/EBITDA" },
+    { value: "dividendYield", label: "Rend. div." },
+    { value: "roe", label: "ROE" },
+    { value: "netMargin", label: "Marge nette" },
+    { value: "debtToEquity", label: "Debt/Equity" },
+    { value: "qualityScore", label: "Score Qualite" },
+  ];
+
+  async function handleCreateAlert() {
+    if (!stock) return;
+    const threshold = parseFloat(alertThreshold);
+    if (isNaN(threshold)) {
+      setAlertMsg("Seuil invalide");
+      return;
+    }
+    setAlertSaving(true);
+    setAlertMsg("");
+    try {
+      await api.createAlert({
+        stockId: stock.id,
+        metric: alertMetric,
+        operator: alertOperator,
+        threshold,
+      });
+      setAlertMsg("Alerte creee !");
+      setAlertThreshold("");
+      setTimeout(() => {
+        setShowAlertForm(false);
+        setAlertMsg("");
+      }, 1200);
+    } catch (err) {
+      setAlertMsg(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setAlertSaving(false);
     }
   }
 
@@ -423,6 +473,14 @@ export default function StockDetailPage() {
             >
               {isBookmarked ? "\u2605" : "\u2606"}
             </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setShowAlertForm(!showAlertForm)}
+              title="Creer une alerte"
+              style={{ fontSize: "1.3rem", padding: "0.125rem 0.375rem", lineHeight: 1 }}
+            >
+              {showAlertForm ? "\u2715" : "\ud83d\udd14"}
+            </button>
             {stock.ticker}.{stock.exchangeId}
             <span style={{ fontWeight: 400, color: "var(--text-muted)", marginLeft: "0.75rem", fontSize: "1rem" }}>
               {stock.name}
@@ -443,6 +501,69 @@ export default function StockDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Alert creation form */}
+      {showAlertForm && (
+        <div className="card" style={{ padding: "1rem", marginBottom: "1.5rem", border: "1px solid var(--primary)" }}>
+          <div style={{ fontSize: "0.875rem", fontWeight: 600, marginBottom: "0.75rem" }}>
+            Nouvelle alerte pour {stock.ticker}
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: "0.125rem" }}>Metrique</label>
+              <select
+                className="filter-select"
+                value={alertMetric}
+                onChange={(e) => setAlertMetric(e.target.value)}
+                style={{ minWidth: 120 }}
+              >
+                {ALERT_METRICS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: "0.125rem" }}>Condition</label>
+              <select
+                className="filter-select"
+                value={alertOperator}
+                onChange={(e) => setAlertOperator(e.target.value)}
+              >
+                <option value="above">Superieur ou egal</option>
+                <option value="below">Inferieur ou egal</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: "0.7rem", color: "var(--text-muted)", display: "block", marginBottom: "0.125rem" }}>Seuil</label>
+              <input
+                className="form-input"
+                type="number"
+                step="any"
+                placeholder="ex: 150.00"
+                value={alertThreshold}
+                onChange={(e) => setAlertThreshold(e.target.value)}
+                style={{ width: 120 }}
+              />
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={handleCreateAlert}
+              disabled={alertSaving || !alertThreshold}
+              style={{ fontSize: "0.8rem" }}
+            >
+              {alertSaving ? "..." : "Creer"}
+            </button>
+          </div>
+          {alertMsg && (
+            <div style={{ fontSize: "0.8rem", marginTop: "0.5rem", color: alertMsg.includes("creee") ? "var(--success)" : "var(--danger)" }}>
+              {alertMsg}
+            </div>
+          )}
+          <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
+            Vous recevrez un email lorsque la condition sera remplie. Pour les metriques en %, entrez la valeur decimale (ex: 0.05 pour 5%).
+          </div>
+        </div>
+      )}
 
       {/* Quality Score + Radar */}
       {stock.qualityScore != null && (

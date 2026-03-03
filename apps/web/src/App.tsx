@@ -6,6 +6,7 @@ import ScreenerPage from "@/pages/ScreenerPage";
 import StockDetailPage from "@/pages/StockDetailPage";
 import PresetsPage from "@/pages/PresetsPage";
 import EmailDigestsPage from "@/pages/EmailDigestsPage";
+import AlertsPage from "@/pages/AlertsPage";
 import AdminPage from "@/pages/AdminPage";
 import type { ReactNode } from "react";
 
@@ -35,8 +36,11 @@ function AppLayout() {
               <NavLink to="/presets" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
                 Presets
               </NavLink>
-              <NavLink to="/email-digests" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+              <NavLink to="/alerts" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
                 Alertes
+              </NavLink>
+              <NavLink to="/email-digests" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+                Digests
               </NavLink>
               {user.role === "super_admin" && (
                 <NavLink to="/admin" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
@@ -84,6 +88,7 @@ export default function App() {
             <Route path="/" element={<ScreenerPage />} />
             <Route path="/stock/:ticker" element={<StockDetailPage />} />
             <Route path="/presets" element={<PresetsPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/email-digests" element={<EmailDigestsPage />} />
             <Route path="/admin" element={<AdminPage />} />
           </Route>

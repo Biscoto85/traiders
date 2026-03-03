@@ -6,6 +6,7 @@ import { runSyncEod } from "./jobs/sync-eod.js";
 import { runSyncFundamentals } from "./jobs/sync-fundamentals.js";
 import { runSyncTickers } from "./jobs/sync-tickers.js";
 import { runEmailDigests } from "./jobs/send-email-digests.js";
+import { runCheckAlerts } from "./jobs/check-alerts.js";
 
 /**
  * Read the current SYNC_MODE from the DB (SystemConfig table).
@@ -65,18 +66,33 @@ async function main() {
     }
   }, 2_000);
 
+  // ── Mail config (used by email digests + alert notifications) ──
+  const mailConfig = {
+    host: config.smtp.host,
+    port: config.smtp.port,
+    secure: config.smtp.secure,
+    user: config.smtp.user,
+    pass: config.smtp.pass,
+    from: config.smtp.from,
+  };
+
   // ── Define cron jobs ──
 
   const jobs: CronJob[] = [];
 
   // EOD prices: weekdays after market close (All World plan — always active)
+  // After EOD sync completes, check price alerts automatically.
   const eodJob = CronJob.from({
     cronTime: config.cron.syncEod,
-    onTick: () => {
+    onTick: async () => {
       abortRequested = false;
-      runSyncEod(prisma, eodhd, config.exchanges, shouldAbort).catch((err) =>
-        console.error("EOD sync cron error:", err),
-      );
+      try {
+        await runSyncEod(prisma, eodhd, config.exchanges, shouldAbort);
+        // Check alerts after prices are updated
+        await runCheckAlerts(prisma, mailConfig, config.appUrl);
+      } catch (err) {
+        console.error("EOD sync cron error:", err);
+      }
     },
     timeZone: "America/New_York",
   });
@@ -118,15 +134,6 @@ async function main() {
   console.log(`Tickers sync scheduled: ${config.cron.syncTickers}`);
 
   // Email digests: weekly (Monday 8am Paris time)
-  const mailConfig = {
-    host: config.smtp.host,
-    port: config.smtp.port,
-    secure: config.smtp.secure,
-    user: config.smtp.user,
-    pass: config.smtp.pass,
-    from: config.smtp.from,
-  };
-
   if (config.smtp.host) {
     const weeklyDigestJob = CronJob.from({
       cronTime: config.cron.emailDigestWeekly,
@@ -194,12 +201,14 @@ async function main() {
       switch (jobName) {
         case "sync-eod":
           await runSyncEod(prisma, eodhd, config.exchanges, shouldAbort);
+          await runCheckAlerts(prisma, mailConfig, config.appUrl);
           break;
         case "sync-tickers":
           await runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort);
           break;
         case "sync-fundamentals":
           await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync, shouldAbort);
+          await runCheckAlerts(prisma, mailConfig, config.appUrl);
           break;
         default:
           console.warn(`[manual-trigger] Unknown job: ${jobName}`);

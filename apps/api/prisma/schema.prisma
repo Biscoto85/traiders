@@ -99,6 +99,7 @@ model Stock {
   priceHistory DailyPrice[]
   fundamentals Fundamentals[]
   bookmarks    Bookmark[]
+  alerts       Alert[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -198,6 +199,7 @@ model User {
   presets       ScreenerPreset[]
   emailDigests  EmailDigest[]
   bookmarks     Bookmark[]
+  alerts        Alert[]
 }
 
 // ─── Screener Presets (saved filter combos) ─────────────
@@ -279,6 +281,27 @@ model SyncJob {
 //
 // Switch to "full" for 1 month each quarter to refresh fundamentals.
 // Annual cost: 8×$19.99 + 4×$99.99 = ~$560 vs $1000 All-in-One/yr.
+
+// ─── Price / Fundamental Alerts ──────────────────────────
+
+model Alert {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  stockId   String
+  metric    String // "lastPrice", "peRatio", "dividendYield", etc.
+  operator  String // "above" | "below"
+  threshold Float
+  isTriggered Boolean  @default(false)
+  lastTriggeredAt DateTime?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isActive, isTriggered])
+}
 
 model SystemConfig {
   key       String   @id // "SYNC_MODE", etc.
