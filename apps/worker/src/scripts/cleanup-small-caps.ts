@@ -2,7 +2,7 @@
  * Cleanup script: remove stocks with marketCap < threshold.
  *
  * Usage:
- *   npx tsx apps/worker/src/scripts/cleanup-small-caps.ts [--dry-run] [--min-cap 50000000]
+ *   npx tsx apps/worker/src/scripts/cleanup-small-caps.ts [--dry-run] [--min-cap 50000000] [--force]
  *
  * All related DailyPrice, Fundamentals, and Bookmark rows are cascade-deleted.
  */
@@ -21,6 +21,31 @@ async function main() {
 
   console.log(`\n=== Cleanup small caps (< ${(minMarketCap / 1e6).toFixed(0)}M) ===\n`);
   if (dryRun) console.log("  ** DRY RUN — no deletions **\n");
+
+  // ── Check no sync is currently running ──
+  const runningSync = await prisma.syncJob.findFirst({
+    where: {
+      jobName: "sync-fundamentals",
+      lastSuccessAt: null,
+      lastError: null,
+      lastRunAt: { not: null },
+    },
+  });
+  if (runningSync) {
+    // Also check: if lastRunAt is recent (< 6h) and no success/error yet, it's likely still running
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    if (runningSync.lastRunAt && runningSync.lastRunAt > sixHoursAgo) {
+      console.log("  ⚠  sync-fundamentals seems to be running (started " +
+        runningSync.lastRunAt.toISOString() + ").");
+      console.log("  Wait for it to finish before running cleanup.\n");
+      console.log("  Use --force to bypass this check.\n");
+      if (!args.includes("--force")) {
+        await prisma.$disconnect();
+        process.exit(1);
+      }
+      console.log("  --force used, proceeding anyway...\n");
+    }
+  }
 
   // ── Diagnostic ──
   const total = await prisma.stock.count();
