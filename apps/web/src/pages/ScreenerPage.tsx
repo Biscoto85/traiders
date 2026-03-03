@@ -899,7 +899,7 @@ export default function ScreenerPage() {
       s.exchangeId,
       `"${(s.name ?? "").replace(/"/g, '""')}"`,
       ...cols.map((c) => {
-        const val = (s as Record<string, unknown>)[c.key];
+        const val = (s as unknown as Record<string, unknown>)[c.key];
         if (val == null) return "";
         return String(val);
       }),
@@ -1227,7 +1227,7 @@ export default function ScreenerPage() {
             {Object.entries(
               ALL_COLUMNS.reduce<Record<string, ColumnDef[]>>((acc, col) => {
                 if (!acc[col.category]) acc[col.category] = [];
-                acc[col.category].push(col);
+                acc[col.category]!.push(col);
                 return acc;
               }, {})
             ).map(([cat, cols]) => (

@@ -107,19 +107,49 @@ export async function runSyncTickers(
         totalProcessed += batch.length;
       }
 
-      // Deactivate tickers no longer listed on the exchange
-      const deactivated = await prisma.stock.updateMany({
-        where: {
-          exchangeId,
-          isActive: true,
-          ticker: { notIn: [...remoteTickers] },
-        },
-        data: { isActive: false },
-      });
+      // Deactivate tickers no longer listed on the exchange.
+      // PostgreSQL limits bind variables to 32767 per statement, so if the
+      // remote ticker list is large we chunk the notIn query.
+      const remoteArray = [...remoteTickers];
+      const CHUNK_SIZE = 15_000; // stay well under 32767 limit
+      let deactivatedTotal = 0;
 
-      if (deactivated.count > 0) {
+      if (remoteArray.length <= CHUNK_SIZE) {
+        // Small enough for a single query
+        const result = await prisma.stock.updateMany({
+          where: {
+            exchangeId,
+            isActive: true,
+            ticker: { notIn: remoteArray },
+          },
+          data: { isActive: false },
+        });
+        deactivatedTotal = result.count;
+      } else {
+        // Large exchange: find active tickers first, then deactivate
+        // those not in the remote set (avoids bind variable overflow)
+        const activeStocks = await prisma.stock.findMany({
+          where: { exchangeId, isActive: true },
+          select: { id: true, ticker: true },
+        });
+        const toDeactivate = activeStocks
+          .filter((s) => !remoteTickers.has(s.ticker))
+          .map((s) => s.id);
+
+        // Batch the deactivation in chunks
+        for (let i = 0; i < toDeactivate.length; i += CHUNK_SIZE) {
+          const chunk = toDeactivate.slice(i, i + CHUNK_SIZE);
+          const result = await prisma.stock.updateMany({
+            where: { id: { in: chunk } },
+            data: { isActive: false },
+          });
+          deactivatedTotal += result.count;
+        }
+      }
+
+      if (deactivatedTotal > 0) {
         console.log(
-          `[${jobName}] ${exchangeId}: deactivated ${deactivated.count} delisted tickers`,
+          `[${jobName}] ${exchangeId}: deactivated ${deactivatedTotal} delisted tickers`,
         );
       }
     }

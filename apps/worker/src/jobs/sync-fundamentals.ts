@@ -2,6 +2,9 @@ import type { PrismaClient } from "@prisma/client";
 import type { EODHDClient } from "@stock-screener/eodhd-client";
 import { computeQualityScore } from "../scoring.js";
 
+/** Yield to the event loop so abort polling can run */
+const yieldLoop = () => new Promise<void>((r) => setImmediate(r));
+
 const BATCH_LIMIT = 1500; // max stocks per exchange per run
 const STALE_DAYS = 7;
 const API_CALLS_PER_STOCK = 10;
@@ -104,6 +107,9 @@ export async function runSyncFundamentals(
       );
 
       for (const stock of stocks) {
+        // Yield to event loop so the abort poll interval can fire
+        await yieldLoop();
+
         // Check abort signal
         if (shouldAbort?.()) {
           const durationMs = Date.now() - startedAt.getTime();
@@ -129,6 +135,19 @@ export async function runSyncFundamentals(
 
           if (!data?.General) {
             continue;
+          }
+
+          // Re-check abort after potentially long API call
+          if (shouldAbort?.()) {
+            const durationMs = Date.now() - startedAt.getTime();
+            const msg = `[ABORTED] Interrompu par l'utilisateur apres ${totalProcessed} stocks (${durationMs}ms)`;
+            console.log(`[${jobName}] ${msg}`);
+            await prisma.syncJob.upsert({
+              where: { jobName },
+              create: { jobName, lastRunAt: startedAt, lastError: msg, durationMs },
+              update: { lastRunAt: startedAt, lastError: msg, tickersProcessed: totalProcessed, durationMs },
+            });
+            return;
           }
 
           const parseNum = (v: string | null | undefined): number | null => {
