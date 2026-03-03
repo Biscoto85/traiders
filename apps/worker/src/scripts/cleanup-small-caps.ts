@@ -12,7 +12,7 @@ import { PrismaClient } from "@prisma/client";
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const minCapIdx = args.indexOf("--min-cap");
-const minMarketCap = minCapIdx !== -1 ? parseInt(args[minCapIdx + 1], 10) : 50_000_000;
+const minMarketCap = minCapIdx !== -1 ? parseInt(args[minCapIdx + 1] ?? "50000000", 10) : 50_000_000;
 const BATCH_SIZE = 500;
 
 async function main() {
