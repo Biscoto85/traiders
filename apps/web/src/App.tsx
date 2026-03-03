@@ -7,6 +7,7 @@ import StockDetailPage from "@/pages/StockDetailPage";
 import PresetsPage from "@/pages/PresetsPage";
 import EmailDigestsPage from "@/pages/EmailDigestsPage";
 import AlertsPage from "@/pages/AlertsPage";
+import ComparePage from "@/pages/ComparePage";
 import AdminPage from "@/pages/AdminPage";
 import type { ReactNode } from "react";
 
@@ -35,6 +36,9 @@ function AppLayout() {
               </NavLink>
               <NavLink to="/presets" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
                 Presets
+              </NavLink>
+              <NavLink to="/compare" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
+                Comparer
               </NavLink>
               <NavLink to="/alerts" className={({ isActive }) => `nav-link ${isActive ? "nav-active" : ""}`}>
                 Alertes
@@ -88,6 +92,7 @@ export default function App() {
             <Route path="/" element={<ScreenerPage />} />
             <Route path="/stock/:ticker" element={<StockDetailPage />} />
             <Route path="/presets" element={<PresetsPage />} />
+            <Route path="/compare" element={<ComparePage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/email-digests" element={<EmailDigestsPage />} />
             <Route path="/admin" element={<AdminPage />} />

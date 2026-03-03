@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { api, type StockDetail, type PriceBar, type FundamentalPeriod } from "@/lib/api";
 import { formatMarketCap, formatPercent, formatRatio } from "@stock-screener/shared";
 
@@ -288,6 +288,7 @@ function MarginChart({ data }: { data: FundamentalPeriod[] }) {
 export default function StockDetailPage() {
   const { ticker } = useParams<{ ticker: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const exchange = searchParams.get("exchange") ?? undefined;
 
   const [stock, setStock] = useState<StockDetail | null>(null);
@@ -480,6 +481,14 @@ export default function StockDetailPage() {
               style={{ fontSize: "1.3rem", padding: "0.125rem 0.375rem", lineHeight: 1 }}
             >
               {showAlertForm ? "\u2715" : "\ud83d\udd14"}
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() => navigate(`/compare?s=${stock.ticker}.${stock.exchangeId}`)}
+              title="Comparer avec d'autres actions"
+              style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+            >
+              Comparer
             </button>
             {stock.ticker}.{stock.exchangeId}
             <span style={{ fontWeight: 400, color: "var(--text-muted)", marginLeft: "0.75rem", fontSize: "1rem" }}>
