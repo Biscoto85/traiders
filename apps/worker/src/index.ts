@@ -44,6 +44,27 @@ async function main() {
     baseUrl: config.eodhd.baseUrl,
   });
 
+  // ── Abort mechanism ──
+  // A shared flag checked by sync jobs to stop gracefully.
+  let abortRequested = false;
+  const shouldAbort = () => abortRequested;
+
+  // Poll for ABORT_SYNC signal every 2s (fast response to user request)
+  const abortPollInterval = setInterval(async () => {
+    try {
+      const abort = await prisma.systemConfig.findUnique({
+        where: { key: "ABORT_SYNC" },
+      });
+      if (abort) {
+        abortRequested = true;
+        await prisma.systemConfig.delete({ where: { key: "ABORT_SYNC" } });
+        console.log("[abort] Abort signal received — stopping current sync...");
+      }
+    } catch {
+      // Ignore transient DB errors
+    }
+  }, 2_000);
+
   // ── Define cron jobs ──
 
   const jobs: CronJob[] = [];
@@ -52,7 +73,8 @@ async function main() {
   const eodJob = CronJob.from({
     cronTime: config.cron.syncEod,
     onTick: () => {
-      runSyncEod(prisma, eodhd, config.exchanges).catch((err) =>
+      abortRequested = false;
+      runSyncEod(prisma, eodhd, config.exchanges, shouldAbort).catch((err) =>
         console.error("EOD sync cron error:", err),
       );
     },
@@ -71,7 +93,8 @@ async function main() {
         console.log("[sync-fundamentals] Skipped — SYNC_MODE is 'daily'. Switch to 'full' (All-in-One plan) to enable.");
         return;
       }
-      runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync).catch((err) =>
+      abortRequested = false;
+      runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync, shouldAbort).catch((err) =>
         console.error("Fundamentals sync cron error:", err),
       );
     },
@@ -84,7 +107,8 @@ async function main() {
   const tickersJob = CronJob.from({
     cronTime: config.cron.syncTickers,
     onTick: () => {
-      runSyncTickers(prisma, eodhd, config.exchanges).catch((err) =>
+      abortRequested = false;
+      runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort).catch((err) =>
         console.error("Tickers sync cron error:", err),
       );
     },
@@ -164,17 +188,18 @@ async function main() {
       await prisma.systemConfig.delete({ where: { key: "PENDING_SYNC" } });
 
       manualSyncRunning = true;
+      abortRequested = false;
       console.log(`[manual-trigger] Running ${jobName}...`);
 
       switch (jobName) {
         case "sync-eod":
-          await runSyncEod(prisma, eodhd, config.exchanges);
+          await runSyncEod(prisma, eodhd, config.exchanges, shouldAbort);
           break;
         case "sync-tickers":
-          await runSyncTickers(prisma, eodhd, config.exchanges);
+          await runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort);
           break;
         case "sync-fundamentals":
-          await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync);
+          await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync, shouldAbort);
           break;
         default:
           console.warn(`[manual-trigger] Unknown job: ${jobName}`);
@@ -194,6 +219,7 @@ async function main() {
   const shutdown = async () => {
     console.log("Shutting down worker...");
     clearInterval(pollInterval);
+    clearInterval(abortPollInterval);
     for (const job of jobs) {
       job.stop();
     }

@@ -12,6 +12,7 @@ export async function runSyncTickers(
   prisma: PrismaClient,
   eodhd: EODHDClient,
   exchanges: string[],
+  shouldAbort?: () => boolean,
 ): Promise<void> {
   const jobName = "sync-tickers";
   const startedAt = new Date();
@@ -32,6 +33,18 @@ export async function runSyncTickers(
     const exchangeInfo = await eodhd.eod.getExchangesList();
 
     for (const exchangeId of exchanges) {
+      if (shouldAbort?.()) {
+        const durationMs = Date.now() - startedAt.getTime();
+        const msg = `[ABORTED] Interrompu par l'utilisateur apres ${totalProcessed} tickers (${durationMs}ms)`;
+        console.log(`[${jobName}] ${msg}`);
+        await prisma.syncJob.upsert({
+          where: { jobName },
+          create: { jobName, lastRunAt: startedAt, lastError: msg, durationMs },
+          update: { lastRunAt: startedAt, lastError: msg, tickersProcessed: totalProcessed, durationMs },
+        });
+        return;
+      }
+
       // Ensure exchange record exists
       const exInfo = exchangeInfo.find((e) => e.Code === exchangeId);
 

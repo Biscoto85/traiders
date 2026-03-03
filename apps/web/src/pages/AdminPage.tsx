@@ -384,6 +384,8 @@ function SyncTab() {
   }
 
   async function handleTrigger(jobName: string) {
+    const label = SYNC_JOB_LABELS[jobName] ?? jobName;
+    if (!confirm(`Lancer la synchronisation "${label}" ? Le worker l'executera sous 15 secondes.`)) return;
     setTriggering(jobName);
     setMessage(null);
     try {
@@ -396,6 +398,19 @@ function SyncTab() {
       setMessage({ text: err instanceof Error ? err.message : "Erreur", type: "error" });
     } finally {
       setTriggering(null);
+    }
+  }
+
+  async function handleAbort() {
+    if (!confirm("Arreter la synchronisation en cours ? Le job s'arretera proprement sous quelques secondes.")) return;
+    setMessage(null);
+    try {
+      const res = await api.adminAbortSync();
+      setMessage({ text: res.data.message, type: "success" });
+      setPendingSync(null);
+      setTimeout(loadJobs, 3_000);
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Erreur", type: "error" });
     }
   }
 
@@ -462,6 +477,15 @@ function SyncTab() {
               </button>
             );
           })}
+          {isAnySyncBusy && (
+            <button
+              className="btn btn-ghost"
+              style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+              onClick={handleAbort}
+            >
+              Arreter
+            </button>
+          )}
         </div>
         {message && (
           <div style={{ marginTop: "0.75rem", fontSize: "0.875rem", color: message.type === "success" ? "var(--success)" : "var(--danger)" }}>

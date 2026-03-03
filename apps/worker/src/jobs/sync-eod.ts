@@ -12,6 +12,7 @@ export async function runSyncEod(
   prisma: PrismaClient,
   eodhd: EODHDClient,
   exchanges: string[],
+  shouldAbort?: () => boolean,
 ): Promise<void> {
   const jobName = "sync-eod";
   const startedAt = new Date();
@@ -29,6 +30,18 @@ export async function runSyncEod(
 
   try {
     for (const exchangeId of exchanges) {
+      if (shouldAbort?.()) {
+        const durationMs = Date.now() - startedAt.getTime();
+        const msg = `[ABORTED] Interrompu par l'utilisateur apres ${totalProcessed} tickers (${durationMs}ms)`;
+        console.log(`[${jobName}] ${msg}`);
+        await prisma.syncJob.upsert({
+          where: { jobName },
+          create: { jobName, lastRunAt: startedAt, lastError: msg, durationMs },
+          update: { lastRunAt: startedAt, lastError: msg, tickersProcessed: totalProcessed, durationMs },
+        });
+        return;
+      }
+
       console.log(`[${jobName}] Fetching bulk EOD for ${exchangeId}...`);
 
       const bulkData = await eodhd.bulk.getEod(exchangeId);

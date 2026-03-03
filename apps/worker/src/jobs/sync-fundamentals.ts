@@ -24,6 +24,7 @@ export async function runSyncFundamentals(
   eodhd: EODHDClient,
   exchanges: string[],
   options?: SyncFundamentalsOptions,
+  shouldAbort?: () => boolean,
 ): Promise<void> {
   const jobName = "sync-fundamentals";
   const startedAt = new Date();
@@ -102,6 +103,19 @@ export async function runSyncFundamentals(
       );
 
       for (const stock of stocks) {
+        // Check abort signal
+        if (shouldAbort?.()) {
+          const durationMs = Date.now() - startedAt.getTime();
+          const msg = `[ABORTED] Interrompu par l'utilisateur apres ${totalProcessed} stocks (${durationMs}ms)`;
+          console.log(`[${jobName}] ${msg}`);
+          await prisma.syncJob.upsert({
+            where: { jobName },
+            create: { jobName, lastRunAt: startedAt, lastError: msg, durationMs },
+            update: { lastRunAt: startedAt, lastError: msg, tickersProcessed: totalProcessed, durationMs },
+          });
+          return;
+        }
+
         // Check budget before each API call
         if (totalProcessed >= maxStocks) {
           budgetExhausted = true;

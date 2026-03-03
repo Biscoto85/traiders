@@ -253,6 +253,23 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  /**
+   * POST /admin/sync-abort — Request abort of the currently running sync
+   */
+  fastify.post("/admin/sync-abort", async (_request, reply) => {
+    // Clear any pending sync too
+    await fastify.prisma.systemConfig.deleteMany({ where: { key: "PENDING_SYNC" } });
+
+    // Set abort signal for the worker to pick up
+    await fastify.prisma.systemConfig.upsert({
+      where: { key: "ABORT_SYNC" },
+      create: { key: "ABORT_SYNC", value: "requested" },
+      update: { value: "requested" },
+    });
+
+    return reply.send({ success: true, data: { message: "Arret demande. Le job s'arretera sous quelques secondes." } });
+  });
+
   // ── System Configuration ──────────────────────────────────
 
   /**

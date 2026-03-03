@@ -189,6 +189,12 @@ export const api = {
       body: JSON.stringify({}),
     }),
 
+  adminAbortSync: () =>
+    request<{ success: true; data: { message: string } }>("/admin/sync-abort", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
   // Admin config
   adminGetConfig: () =>
     request<{ success: true; data: Record<string, string> }>("/admin/config"),
