@@ -18,9 +18,13 @@ async function request<T>(
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) ?? {}),
   };
+
+  // Only set Content-Type when there's a body (avoids Fastify 400 on empty DELETE)
+  if (options.body) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;

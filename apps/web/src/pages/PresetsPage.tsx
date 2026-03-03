@@ -14,6 +14,22 @@ export default function PresetsPage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // Hidden default presets (stored in localStorage)
+  const [hiddenDefaults, setHiddenDefaults] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("hiddenDefaultPresets") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  function hideDefaultPreset(name: string) {
+    if (!confirm(`Masquer la strategie "${name}" ?`)) return;
+    const updated = [...hiddenDefaults, name];
+    setHiddenDefaults(updated);
+    localStorage.setItem("hiddenDefaultPresets", JSON.stringify(updated));
+  }
+
   useEffect(() => {
     loadPresets();
   }, []);
@@ -208,7 +224,7 @@ export default function PresetsPage() {
         Strategies expertes (modeles)
       </h3>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        {DEFAULT_PRESETS.map((dp) => (
+        {DEFAULT_PRESETS.filter((dp) => !hiddenDefaults.includes(dp.name)).map((dp) => (
           <div key={dp.name} className="card" style={{ padding: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -235,10 +251,26 @@ export default function PresetsPage() {
                 >
                   Sauvegarder
                 </button>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", color: "var(--danger)" }}
+                  onClick={() => hideDefaultPreset(dp.name)}
+                >
+                  Suppr.
+                </button>
               </div>
             </div>
           </div>
         ))}
+        {hiddenDefaults.length > 0 && (
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: "0.75rem", alignSelf: "flex-start" }}
+            onClick={() => { setHiddenDefaults([]); localStorage.removeItem("hiddenDefaultPresets"); }}
+          >
+            Restaurer les strategies masquees ({hiddenDefaults.length})
+          </button>
+        )}
       </div>
     </div>
   );
