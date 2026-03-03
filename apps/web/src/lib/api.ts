@@ -249,16 +249,43 @@ export interface StockSummary {
   sector: string | null;
   industry: string | null;
   currency: string;
+  isActive: boolean;
   lastPrice: number | null;
   lastVolume: string | null;
   marketCap: number | null;
   peRatio: number | null;
+  forwardPe: number | null;
+  pegRatio: number | null;
+  eps: number | null;
+  dilutedEps: number | null;
   dividendYield: number | null;
   revenueGrowth: number | null;
+  earningsGrowth: number | null;
+  grossMargin: number | null;
+  operatingMargin: number | null;
+  netMargin: number | null;
+  roe: number | null;
+  roa: number | null;
+  debtToEquity: number | null;
+  currentRatio: number | null;
+  beta: number | null;
   week52High: number | null;
   week52Low: number | null;
-  beta: number | null;
+  pctFrom52WeekHigh: number | null;
+  pctFrom52WeekLow: number | null;
+  evToEbitda: number | null;
+  evToRevenue: number | null;
+  pbRatio: number | null;
+  psRatio: number | null;
+  fcfYield: number | null;
+  operatingCashFlow: number | null;
+  priceToOCF: number | null;
+  netDebt: number | null;
+  netDebtToOCF: number | null;
+  equityToMarketCap: number | null;
+  revenueCAGR5Y: number | null;
   qualityScore: number | null;
+  targetPrice: number | null;
 }
 
 export interface StockDetail extends StockSummary {

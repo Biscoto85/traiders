@@ -1,12 +1,79 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api, type StockSummary, type FilterOptions, type Preset } from "@/lib/api";
 import { formatMarketCap, formatPercent, formatRatio, DEFAULT_PRESETS } from "@stock-screener/shared";
 
-type SortField = "marketCap" | "peRatio" | "dividendYield" | "lastPrice" | "revenueGrowth" | "ticker" | "qualityScore";
+type SortField = string; // All screener fields are sortable
 type SortDir = "asc" | "desc";
 type FilterLogic = "AND" | "OR";
 type Operator = ">" | ">=" | "<" | "<=" | "=" | "entre";
+
+// ── Column definitions for the screener table ──
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  shortLabel?: string;
+  format: "text" | "price" | "cap" | "ratio" | "pct" | "score";
+  category: string;
+}
+
+const ALL_COLUMNS: ColumnDef[] = [
+  { key: "sector", label: "Secteur", format: "text", category: "Base" },
+  { key: "lastPrice", label: "Prix", format: "price", category: "Base" },
+  { key: "marketCap", label: "Market Cap", shortLabel: "Mkt Cap", format: "cap", category: "Taille" },
+  { key: "peRatio", label: "P/E Ratio", shortLabel: "P/E", format: "ratio", category: "Valorisation" },
+  { key: "forwardPe", label: "Forward P/E", shortLabel: "Fwd P/E", format: "ratio", category: "Valorisation" },
+  { key: "pegRatio", label: "PEG Ratio", shortLabel: "PEG", format: "ratio", category: "Valorisation" },
+  { key: "pbRatio", label: "P/B Ratio", shortLabel: "P/B", format: "ratio", category: "Valorisation" },
+  { key: "psRatio", label: "P/S Ratio", shortLabel: "P/S", format: "ratio", category: "Valorisation" },
+  { key: "evToEbitda", label: "EV/EBITDA", format: "ratio", category: "Valorisation" },
+  { key: "evToRevenue", label: "EV/Revenue", shortLabel: "EV/Rev", format: "ratio", category: "Valorisation" },
+  { key: "dividendYield", label: "Div. Yield", format: "pct", category: "Rendement" },
+  { key: "fcfYield", label: "FCF Yield", format: "pct", category: "Rendement" },
+  { key: "revenueGrowth", label: "Rev. Growth", format: "pct", category: "Croissance" },
+  { key: "earningsGrowth", label: "Earn. Growth", format: "pct", category: "Croissance" },
+  { key: "revenueCAGR5Y", label: "CAGR 5Y Rev.", format: "pct", category: "Croissance" },
+  { key: "grossMargin", label: "Marge brute", format: "pct", category: "Rentabilite" },
+  { key: "operatingMargin", label: "Marge op.", format: "pct", category: "Rentabilite" },
+  { key: "netMargin", label: "Marge nette", format: "pct", category: "Rentabilite" },
+  { key: "roe", label: "ROE", format: "pct", category: "Rentabilite" },
+  { key: "roa", label: "ROA", format: "pct", category: "Rentabilite" },
+  { key: "debtToEquity", label: "Debt/Equity", shortLabel: "D/E", format: "ratio", category: "Risque" },
+  { key: "currentRatio", label: "Current Ratio", shortLabel: "Cur. R.", format: "ratio", category: "Risque" },
+  { key: "beta", label: "Beta", format: "ratio", category: "Risque" },
+  { key: "priceToOCF", label: "P/OCF", format: "ratio", category: "Cash-flow" },
+  { key: "netDebtToOCF", label: "Dette/OCF", format: "ratio", category: "Cash-flow" },
+  { key: "qualityScore", label: "Score Qualite", shortLabel: "Score", format: "score", category: "Score" },
+  { key: "targetPrice", label: "Prix cible", format: "price", category: "Analyste" },
+  { key: "pctFrom52WeekHigh", label: "% vs 52s High", shortLabel: "vs 52H", format: "pct", category: "Technique" },
+  { key: "pctFrom52WeekLow", label: "% vs 52s Low", shortLabel: "vs 52L", format: "pct", category: "Technique" },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = [
+  "sector", "lastPrice", "marketCap", "peRatio", "dividendYield", "revenueGrowth", "qualityScore",
+];
+
+function getInitialColumns(): string[] {
+  try {
+    const saved = localStorage.getItem("screenerColumns");
+    if (saved) return JSON.parse(saved);
+  } catch { /* ignore */ }
+  return DEFAULT_VISIBLE_COLUMNS;
+}
+
+function formatColumnValue(stock: StockSummary, col: ColumnDef): string {
+  const val = (stock as unknown as Record<string, unknown>)[col.key];
+  if (val == null) return "\u2014";
+  switch (col.format) {
+    case "text": return String(val);
+    case "price": return (val as number).toFixed(2);
+    case "cap": return formatMarketCap(val as number);
+    case "ratio": return formatRatio(val as number);
+    case "pct": return formatPercent(val as number);
+    case "score": return String(Math.round(val as number));
+  }
+}
 
 interface RangeVal { min?: number; max?: number; gt?: number; lt?: number }
 
@@ -413,6 +480,10 @@ export default function ScreenerPage() {
   // Expanded preset (read-only detail)
   const [expandedPreset, setExpandedPreset] = useState<string | null>(null);
 
+  // Column configuration
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(getInitialColumns);
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+
   // Apply incoming preset state
   useEffect(() => {
     if (!incomingState?.filters) return;
@@ -441,11 +512,8 @@ export default function ScreenerPage() {
     setPresetName("Preset applique");
 
     if (incomingState.sort) {
-      const validFields: SortField[] = ["marketCap", "peRatio", "dividendYield", "lastPrice", "revenueGrowth", "ticker"];
-      if (validFields.includes(incomingState.sort.field as SortField)) {
-        setSortField(incomingState.sort.field as SortField);
-        setSortDir(incomingState.sort.direction as SortDir);
-      }
+      setSortField(incomingState.sort.field as SortField);
+      setSortDir(incomingState.sort.direction as SortDir);
     }
 
     window.history.replaceState({}, "");
@@ -637,11 +705,8 @@ export default function ScreenerPage() {
     resetPage();
 
     if (sort && "field" in sort && "direction" in sort) {
-      const validFields: SortField[] = ["marketCap", "peRatio", "dividendYield", "lastPrice", "revenueGrowth", "ticker"];
-      if (validFields.includes(sort.field as SortField)) {
-        setSortField(sort.field as SortField);
-        setSortDir(sort.direction as SortDir);
-      }
+      setSortField(sort.field as SortField);
+      setSortDir(sort.direction as SortDir);
     }
 
     setShowPresets(false);
@@ -811,6 +876,47 @@ export default function ScreenerPage() {
     }
   }
 
+  // Column management
+  function toggleColumn(key: string) {
+    setVisibleColumns((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      localStorage.setItem("screenerColumns", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function resetColumns() {
+    setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+    localStorage.setItem("screenerColumns", JSON.stringify(DEFAULT_VISIBLE_COLUMNS));
+  }
+
+  // CSV export
+  function exportCSV() {
+    const cols = ALL_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+    const headers = ["Ticker", "Exchange", "Nom", ...cols.map((c) => c.label)];
+    const rows = stocks.map((s) => [
+      s.ticker,
+      s.exchangeId,
+      `"${(s.name ?? "").replace(/"/g, '""')}"`,
+      ...cols.map((c) => {
+        const val = (s as Record<string, unknown>)[c.key];
+        if (val == null) return "";
+        return String(val);
+      }),
+    ]);
+
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `screener-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const activeColumns = ALL_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+
   const hasActiveFilters = Object.keys(rangeFilters).length > 0 || exchange || sector || country || zone;
 
   // Exchanges filtered by zone
@@ -849,6 +955,20 @@ export default function ScreenerPage() {
           onClick={() => setShowCriteriaPanel(!showCriteriaPanel)}
         >
           + Criteres
+        </button>
+        <button
+          className={`btn ${showColumnPicker ? "btn-primary" : "btn-ghost"}`}
+          onClick={() => setShowColumnPicker(!showColumnPicker)}
+        >
+          Colonnes
+        </button>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: "0.75rem" }}
+          onClick={exportCSV}
+          title="Exporter les resultats visibles en CSV"
+        >
+          Export CSV
         </button>
         {hasActiveFilters && (
           <>
@@ -1094,6 +1214,43 @@ export default function ScreenerPage() {
         </div>
       )}
 
+      {/* ═══ Column picker panel ═══ */}
+      {showColumnPicker && (
+        <div className="card screener-panel" style={{ padding: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>Colonnes visibles</span>
+            <button className="btn btn-ghost" style={{ fontSize: "0.7rem" }} onClick={resetColumns}>
+              Reinitialiser
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem" }}>
+            {Object.entries(
+              ALL_COLUMNS.reduce<Record<string, ColumnDef[]>>((acc, col) => {
+                if (!acc[col.category]) acc[col.category] = [];
+                acc[col.category].push(col);
+                return acc;
+              }, {})
+            ).map(([cat, cols]) => (
+              <div key={cat} style={{ minWidth: 140 }}>
+                <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.375rem" }}>
+                  {cat}
+                </div>
+                {cols.map((col) => (
+                  <label key={col.key} style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.8rem", cursor: "pointer", padding: "0.125rem 0" }}>
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.includes(col.key)}
+                      onChange={() => toggleColumn(col.key)}
+                    />
+                    {col.shortLabel ?? col.label}
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filters bar */}
       <div className="filters-bar">
         <div className="filter-group">
@@ -1207,15 +1364,19 @@ export default function ScreenerPage() {
           <thead>
             <tr>
               <th style={{ width: 36, padding: "0.5rem 0.25rem" }}></th>
-              <th onClick={() => handleSort("ticker")}>Ticker{sortIndicator("ticker")}</th>
+              <th onClick={() => handleSort("ticker")} style={{ cursor: "pointer" }}>Ticker{sortIndicator("ticker")}</th>
               <th>Nom</th>
-              <th>Secteur</th>
-              <th className="text-right" onClick={() => handleSort("lastPrice")}>Prix{sortIndicator("lastPrice")}</th>
-              <th className="text-right" onClick={() => handleSort("marketCap")}>Market Cap{sortIndicator("marketCap")}</th>
-              <th className="text-right" onClick={() => handleSort("peRatio")}>P/E{sortIndicator("peRatio")}</th>
-              <th className="text-right" onClick={() => handleSort("dividendYield")}>Div. Yield{sortIndicator("dividendYield")}</th>
-              <th className="text-right" onClick={() => handleSort("revenueGrowth")}>Rev. Growth{sortIndicator("revenueGrowth")}</th>
-              <th className="text-right" onClick={() => handleSort("qualityScore")} title="Score Qualite Pikpik (0-100)">Score{sortIndicator("qualityScore")}</th>
+              {activeColumns.map((col) => (
+                <th
+                  key={col.key}
+                  className={col.format !== "text" ? "text-right" : ""}
+                  onClick={() => handleSort(col.key)}
+                  style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+                  title={col.label}
+                >
+                  {col.shortLabel ?? col.label}{sortIndicator(col.key)}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -1232,30 +1393,38 @@ export default function ScreenerPage() {
                   </button>
                 </td>
                 <td><Link to={`/stock/${stock.ticker}?exchange=${stock.exchangeId}`}><strong>{stock.ticker}</strong></Link></td>
-                <td style={{ maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis" }}>{stock.name}</td>
-                <td>{stock.sector ?? "—"}</td>
-                <td className="text-right">{stock.lastPrice?.toFixed(2) ?? "—"}</td>
-                <td className="text-right">{formatMarketCap(stock.marketCap)}</td>
-                <td className="text-right">{formatRatio(stock.peRatio)}</td>
-                <td className="text-right">{formatPercent(stock.dividendYield)}</td>
-                <td className={`text-right ${(stock.revenueGrowth ?? 0) >= 0 ? "text-success" : "text-danger"}`}>
-                  {formatPercent(stock.revenueGrowth)}
-                </td>
-                <td className="text-right">
-                  {stock.qualityScore != null ? (
-                    <span style={{
-                      fontWeight: 600,
-                      color: stock.qualityScore >= 70 ? "var(--success)" : stock.qualityScore >= 45 ? "var(--warning)" : "var(--danger)",
-                    }}>
-                      {stock.qualityScore}
-                    </span>
-                  ) : "—"}
-                </td>
+                <td style={{ maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stock.name}</td>
+                {activeColumns.map((col) => {
+                  const val = (stock as unknown as Record<string, unknown>)[col.key];
+                  const formatted = formatColumnValue(stock, col);
+
+                  // Color logic for specific formats
+                  let style: React.CSSProperties = {};
+                  if (col.format === "pct" && val != null) {
+                    const n = val as number;
+                    if (col.key === "pctFrom52WeekHigh" || col.key === "pctFrom52WeekLow") {
+                      style.color = n >= 0 ? "var(--success)" : "var(--danger)";
+                    } else if (["revenueGrowth", "earningsGrowth", "revenueCAGR5Y"].includes(col.key)) {
+                      style.color = n >= 0 ? "var(--success)" : "var(--danger)";
+                    }
+                  }
+                  if (col.format === "score" && val != null) {
+                    const n = val as number;
+                    style.fontWeight = 600;
+                    style.color = n >= 70 ? "var(--success)" : n >= 45 ? "var(--warning)" : "var(--danger)";
+                  }
+
+                  return (
+                    <td key={col.key} className={col.format !== "text" ? "text-right" : ""} style={style}>
+                      {formatted}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
             {!loading && stocks.length === 0 && (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
+                <td colSpan={3 + activeColumns.length} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
                   Aucun resultat pour ces criteres
                 </td>
               </tr>

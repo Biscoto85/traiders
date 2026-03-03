@@ -60,7 +60,7 @@ export default function EmailDigestsPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Supprimer l'alerte "${name}" ?`)) return;
+    if (!confirm(`Supprimer le digest "${name}" ?`)) return;
     try {
       await api.deleteEmailDigest(id);
       setDigests((prev) => prev.filter((d) => d.id !== id));
@@ -112,13 +112,13 @@ export default function EmailDigestsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
         <div>
-          <h2>Alertes email</h2>
+          <h2>Digests email</h2>
           <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-            Recois un email avec les actions qui correspondent a tes criteres.
+            Recois un email periodique avec les actions qui correspondent a tes criteres.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? "Annuler" : "+ Nouvelle alerte"}
+          {showCreate ? "Annuler" : "+ Nouveau digest"}
         </button>
       </div>
 
@@ -126,7 +126,7 @@ export default function EmailDigestsPage() {
         <div className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>Nom de l'alerte</label>
+              <label>Nom du digest</label>
               <input
                 className="form-input"
                 value={newName}
@@ -166,7 +166,7 @@ export default function EmailDigestsPage() {
             </div>
             <div>
               <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !newName.trim()}>
-                {creating ? "Creation..." : "Creer l'alerte"}
+                {creating ? "Creation..." : "Creer le digest"}
               </button>
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function EmailDigestsPage() {
         </div>
       ) : (
         <div className="card" style={{ textAlign: "center", color: "var(--text-muted)", padding: "2rem" }}>
-          Aucune alerte email configuree. Cree-en une pour recevoir des rapports reguliers.
+          Aucun digest configure. Creez-en un pour recevoir des rapports reguliers par email.
         </div>
       )}
     </div>
