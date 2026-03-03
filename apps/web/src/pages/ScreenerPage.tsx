@@ -275,6 +275,27 @@ export default function ScreenerPage() {
     resetPage();
   }
 
+  function updateCriterion(key: string, field: "min" | "max", value: string) {
+    setRangeFilters((prev) => {
+      const existing = (prev[key] as { min?: number; max?: number }) ?? {};
+      const updated = { ...existing };
+      if (value.trim() === "") {
+        delete updated[field];
+      } else {
+        const num = parseFloat(value);
+        if (!isNaN(num)) updated[field] = num;
+      }
+      // Remove the criterion entirely if both min and max are gone
+      if (updated.min === undefined && updated.max === undefined) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: updated };
+    });
+    resetPage();
+  }
+
   function applyPreset(filters: Record<string, unknown>, sort?: Record<string, unknown> | null, name?: string) {
     const f = { ...filters };
     // Extract classification filters
@@ -356,6 +377,7 @@ export default function ScreenerPage() {
     setSaveName(preset.name);
     setShowSave(true);
     setShowPresets(false);
+    setShowCriteriaPanel(true);
   }
 
   async function handleDeletePreset(id: string) {
@@ -591,16 +613,67 @@ export default function ScreenerPage() {
       {/* Criteria editor panel */}
       {showCriteriaPanel && (
         <div className="card screener-panel">
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+          {editingPresetId && (
+            <div style={{ marginBottom: "0.75rem", fontSize: "0.8rem", color: "var(--primary)", fontWeight: 500 }}>
+              Edition : {presetName}
+            </div>
+          )}
+
+          {/* Active criteria — editable rows */}
+          {Object.keys(rangeFilters).length > 0 && (
+            <div className="criteria-list">
+              {Object.entries(rangeFilters).map(([key, val]) => {
+                const v = val as { min?: number; max?: number };
+                const meta = CRITERIA_OPTIONS.find((c) => c.key === key);
+                return (
+                  <div key={key} className="criteria-row">
+                    <span className="criteria-row-label" title={meta?.hint}>
+                      {meta?.label ?? key}
+                      {meta?.isPercent && <span className="criteria-row-hint"> (%)</span>}
+                      {meta?.isCurrency && <span className="criteria-row-hint"> ($)</span>}
+                    </span>
+                    <div className="criteria-row-inputs">
+                      <input
+                        className="form-input criteria-row-input"
+                        type="number"
+                        step="any"
+                        placeholder="Min"
+                        value={v?.min ?? ""}
+                        onChange={(e) => updateCriterion(key, "min", e.target.value)}
+                      />
+                      <span className="criteria-row-sep">-</span>
+                      <input
+                        className="form-input criteria-row-input"
+                        type="number"
+                        step="any"
+                        placeholder="Max"
+                        value={v?.max ?? ""}
+                        onChange={(e) => updateCriterion(key, "max", e.target.value)}
+                      />
+                    </div>
+                    <button
+                      className="btn-icon btn-icon-danger"
+                      title="Retirer ce critere"
+                      onClick={() => removeCriterion(key)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add new criterion row */}
+          <div className="criteria-row criteria-row-add">
             <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
-              <label>Critere</label>
               <select
                 className="filter-select"
                 value={newCriterionKey}
                 onChange={(e) => setNewCriterionKey(e.target.value)}
                 style={{ width: "100%" }}
               >
-                <option value="">-- Choisir --</option>
+                <option value="">+ Ajouter un critere...</option>
                 {Object.entries(criteriaByCategory).map(([cat, items]) => (
                   <optgroup key={cat} label={cat}>
                     {items.map((c) => (
@@ -610,46 +683,46 @@ export default function ScreenerPage() {
                 ))}
               </select>
             </div>
-            <div className="filter-group" style={{ width: 120 }}>
-              <label>Min</label>
-              <input
-                className="form-input"
-                style={{ padding: "0.375rem 0.5rem", fontSize: "0.8125rem" }}
-                type="number"
-                step="any"
-                value={newCriterionMin}
-                onChange={(e) => setNewCriterionMin(e.target.value)}
-                placeholder={CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.hint?.split(" - ")[0]?.replace("ex: ", "") ?? ""}
-              />
-            </div>
-            <div className="filter-group" style={{ width: 120 }}>
-              <label>Max</label>
-              <input
-                className="form-input"
-                style={{ padding: "0.375rem 0.5rem", fontSize: "0.8125rem" }}
-                type="number"
-                step="any"
-                value={newCriterionMax}
-                onChange={(e) => setNewCriterionMax(e.target.value)}
-                placeholder={CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.hint?.split(" - ")[1] ?? ""}
-              />
-            </div>
-            <button
-              className="btn btn-primary"
-              style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem" }}
-              onClick={addCriterion}
-              disabled={!newCriterionKey || (!newCriterionMin.trim() && !newCriterionMax.trim())}
-            >
-              Ajouter
-            </button>
+            {newCriterionKey && (
+              <>
+                <div className="criteria-row-inputs">
+                  <input
+                    className="form-input criteria-row-input"
+                    type="number"
+                    step="any"
+                    value={newCriterionMin}
+                    onChange={(e) => setNewCriterionMin(e.target.value)}
+                    placeholder={CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.hint?.split(" - ")[0]?.replace("ex: ", "") ?? "Min"}
+                  />
+                  <span className="criteria-row-sep">-</span>
+                  <input
+                    className="form-input criteria-row-input"
+                    type="number"
+                    step="any"
+                    value={newCriterionMax}
+                    onChange={(e) => setNewCriterionMax(e.target.value)}
+                    placeholder={CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.hint?.split(" - ")[1] ?? "Max"}
+                  />
+                </div>
+                <button
+                  className="btn btn-primary"
+                  style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem", whiteSpace: "nowrap" }}
+                  onClick={addCriterion}
+                  disabled={!newCriterionMin.trim() && !newCriterionMax.trim()}
+                >
+                  OK
+                </button>
+              </>
+            )}
           </div>
+
           {newCriterionKey && (
-            <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            <div style={{ marginTop: "0.375rem", fontSize: "0.7rem", color: "var(--text-muted)" }}>
               {CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.isPercent
-                ? "Valeurs en decimales (ex: 0.12 = 12%)"
+                ? "Decimales (ex: 0.12 = 12%)"
                 : CRITERIA_OPTIONS.find((c) => c.key === newCriterionKey)?.isCurrency
-                  ? "Valeurs en devise (ex: 1000000000 = 1B)"
-                  : "Valeurs en ratio"}
+                  ? "Devise (ex: 1000000000 = 1B)"
+                  : "Ratio"}
             </div>
           )}
         </div>
