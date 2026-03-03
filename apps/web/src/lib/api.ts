@@ -141,6 +141,22 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // Bookmarks
+  bookmarkIds: () =>
+    request<{ success: true; data: string[] }>("/bookmarks/ids"),
+
+  bookmarks: () =>
+    request<{ success: true; data: BookmarkedStock[] }>("/bookmarks"),
+
+  addBookmark: (stockId: string) =>
+    request<{ success: true; data: { id: string; stockId: string } }>(`/bookmarks/${stockId}`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  removeBookmark: (stockId: string) =>
+    request<{ success: true; data: null }>(`/bookmarks/${stockId}`, { method: "DELETE" }),
+
   // Admin
   adminUsers: () =>
     request<{ success: true; data: AdminUser[] }>("/admin/users"),
@@ -312,6 +328,25 @@ export interface EmailDigest {
   isActive: boolean;
   lastSentAt: string | null;
   createdAt: string;
+}
+
+export interface BookmarkedStock {
+  id: string;
+  stockId: string;
+  createdAt: string;
+  stock: {
+    id: string;
+    ticker: string;
+    exchangeId: string;
+    name: string;
+    sector: string | null;
+    industry: string | null;
+    lastPrice: number | null;
+    marketCap: number | null;
+    peRatio: number | null;
+    dividendYield: number | null;
+    revenueGrowth: number | null;
+  };
 }
 
 export interface AdminUser {

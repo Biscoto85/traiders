@@ -177,6 +177,30 @@ select {
   text-align: right;
 }
 
+.bookmark-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.bookmark-btn:hover {
+  color: var(--warning);
+}
+
+.bookmark-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.bookmark-active {
+  color: var(--warning);
+}
+
 .text-success {
   color: var(--success);
 }

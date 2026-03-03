@@ -28,6 +28,8 @@ export default function StockDetailPage() {
   const [fundamentals, setFundamentals] = useState<FundamentalPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [togglingBookmark, setTogglingBookmark] = useState(false);
 
   useEffect(() => {
     if (!ticker) return;
@@ -42,11 +44,13 @@ export default function StockDetailPage() {
       api.stock(ticker, exchange),
       api.prices(ticker, { from: fromDate, exchange }),
       api.fundamentals(ticker, { type: "quarterly", limit: 8, exchange }),
+      api.bookmarkIds(),
     ])
-      .then(([stockRes, pricesRes, fundRes]) => {
+      .then(([stockRes, pricesRes, fundRes, bmRes]) => {
         setStock(stockRes.data);
         setPrices(pricesRes.data);
         setFundamentals(fundRes.data);
+        setIsBookmarked(bmRes.data.includes(stockRes.data.id));
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Erreur de chargement"))
       .finally(() => setLoading(false));
@@ -55,6 +59,24 @@ export default function StockDetailPage() {
   if (loading) return <div className="loading">Chargement...</div>;
   if (error) return <div className="auth-error">{error}</div>;
   if (!stock) return <div className="loading">Action non trouvee</div>;
+
+  async function handleToggleBookmark() {
+    if (!stock) return;
+    setTogglingBookmark(true);
+    try {
+      if (isBookmarked) {
+        await api.removeBookmark(stock.id);
+        setIsBookmarked(false);
+      } else {
+        await api.addBookmark(stock.id);
+        setIsBookmarked(true);
+      }
+    } catch (err) {
+      console.error("Bookmark error:", err);
+    } finally {
+      setTogglingBookmark(false);
+    }
+  }
 
   // Price sparkline (simple ASCII-like bar using CSS)
   const priceMin = prices.length ? Math.min(...prices.map((p) => p.low)) : 0;
@@ -124,7 +146,16 @@ export default function StockDetailPage() {
       {/* Header */}
       <div style={{ marginTop: "1rem", marginBottom: "1.5rem", display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "1rem" }}>
         <div>
-          <h2>
+          <h2 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button
+              className={`bookmark-btn ${isBookmarked ? "bookmark-active" : ""}`}
+              onClick={handleToggleBookmark}
+              disabled={togglingBookmark}
+              title={isBookmarked ? "Retirer des favoris" : "Ajouter aux favoris"}
+              style={{ fontSize: "1.5rem" }}
+            >
+              {isBookmarked ? "\u2605" : "\u2606"}
+            </button>
             {stock.ticker}.{stock.exchangeId}
             <span style={{ fontWeight: 400, color: "var(--text-muted)", marginLeft: "0.75rem", fontSize: "1rem" }}>
               {stock.name}

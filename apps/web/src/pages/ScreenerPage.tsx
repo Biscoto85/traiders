@@ -110,6 +110,10 @@ export default function ScreenerPage() {
   const [userPresets, setUserPresets] = useState<Preset[]>([]);
   const [showPresets, setShowPresets] = useState(false);
 
+  // Bookmarks
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [togglingBookmark, setTogglingBookmark] = useState<string | null>(null);
+
   // Save preset
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -148,10 +152,11 @@ export default function ScreenerPage() {
     window.history.replaceState({}, "");
   }, [incomingState]);
 
-  // Load filter options + user presets
+  // Load filter options + user presets + bookmarks
   useEffect(() => {
     api.filterOptions().then((res) => setFilterOptions(res.data)).catch(console.error);
     api.presets().then((res) => setUserPresets(res.data)).catch(console.error);
+    api.bookmarkIds().then((res) => setBookmarkedIds(new Set(res.data))).catch(console.error);
   }, []);
 
   const fetchStocks = useCallback(async () => {
@@ -310,6 +315,23 @@ export default function ScreenerPage() {
       alert(err instanceof Error ? err.message : "Erreur");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleBookmark(stockId: string) {
+    setTogglingBookmark(stockId);
+    try {
+      if (bookmarkedIds.has(stockId)) {
+        await api.removeBookmark(stockId);
+        setBookmarkedIds((prev) => { const next = new Set(prev); next.delete(stockId); return next; });
+      } else {
+        await api.addBookmark(stockId);
+        setBookmarkedIds((prev) => new Set(prev).add(stockId));
+      }
+    } catch (err) {
+      console.error("Bookmark error:", err);
+    } finally {
+      setTogglingBookmark(null);
     }
   }
 
@@ -626,6 +648,7 @@ export default function ScreenerPage() {
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: 36, padding: "0.5rem 0.25rem" }}></th>
               <th onClick={() => handleSort("ticker")}>Ticker{sortIndicator("ticker")}</th>
               <th>Nom</th>
               <th>Secteur</th>
@@ -639,6 +662,16 @@ export default function ScreenerPage() {
           <tbody>
             {stocks.map((stock) => (
               <tr key={stock.id}>
+                <td style={{ padding: "0.5rem 0.25rem", textAlign: "center" }}>
+                  <button
+                    className={`bookmark-btn ${bookmarkedIds.has(stock.id) ? "bookmark-active" : ""}`}
+                    onClick={() => toggleBookmark(stock.id)}
+                    disabled={togglingBookmark === stock.id}
+                    title={bookmarkedIds.has(stock.id) ? "Retirer des favoris" : "Ajouter aux favoris"}
+                  >
+                    {bookmarkedIds.has(stock.id) ? "\u2605" : "\u2606"}
+                  </button>
+                </td>
                 <td><Link to={`/stock/${stock.ticker}?exchange=${stock.exchangeId}`}><strong>{stock.ticker}</strong></Link></td>
                 <td style={{ maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis" }}>{stock.name}</td>
                 <td>{stock.sector ?? "—"}</td>
@@ -653,7 +686,7 @@ export default function ScreenerPage() {
             ))}
             {!loading && stocks.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
                   Aucun resultat pour ces criteres
                 </td>
               </tr>
