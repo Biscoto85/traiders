@@ -34,16 +34,6 @@ function scoreUp(value: number | null | undefined, thresholds: [number, number, 
   return 0;
 }
 
-function scoreDown(value: number | null | undefined, thresholds: [number, number, number, number]): number | null {
-  if (value == null || isNaN(value)) return null;
-  const [t10, t8, t6, t3] = thresholds;
-  if (value <= t10) return 10;
-  if (value <= t8) return 8;
-  if (value <= t6) return 6;
-  if (value <= t3) return 3;
-  return 0;
-}
-
 /**
  * Score Capi / CF opérationnel — the investor's main valuation metric.
  *
