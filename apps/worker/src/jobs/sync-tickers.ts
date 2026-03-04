@@ -45,8 +45,12 @@ async function buildIndexWhitelist(
     }
   }
 
+  // Log breakdown by exchange so the user knows which exchanges to configure
+  const exchangeBreakdown = [...whitelist.entries()]
+    .map(([ex, tickers]) => `${ex}(${tickers.size})`)
+    .join(", ");
   console.log(
-    `[sync-tickers] Index whitelist: ${totalComponents} unique tickers across ${whitelist.size} exchanges`,
+    `[sync-tickers] Index whitelist: ${totalComponents} tickers across ${whitelist.size} exchanges: ${exchangeBreakdown}`,
   );
 
   return whitelist;
@@ -83,15 +87,19 @@ export async function runSyncTickers(
     const whitelist = await buildIndexWhitelist(eodhd, indices ?? []);
 
     if (whitelist) {
-      // When using indices, auto-expand exchanges to include all exchanges
-      // referenced in the index constituents
+      // Warn about index exchanges not in SYNC_EXCHANGES (they'll be skipped)
       const indexExchanges = [...whitelist.keys()];
       const missingExchanges = indexExchanges.filter((e) => !exchanges.includes(e));
       if (missingExchanges.length > 0) {
-        console.log(
-          `[${jobName}] Auto-adding exchanges from indices: ${missingExchanges.join(", ")}`,
+        const detail = missingExchanges
+          .map((e) => `${e}(${whitelist.get(e)!.size})`)
+          .join(", ");
+        console.warn(
+          `[${jobName}] WARNING: ${missingExchanges.length} exchanges from indices not in SYNC_EXCHANGES — these stocks will be skipped: ${detail}`,
         );
-        exchanges = [...exchanges, ...missingExchanges];
+        console.warn(
+          `[${jobName}] Add them to SYNC_EXCHANGES if you want to include them.`,
+        );
       }
     }
 
