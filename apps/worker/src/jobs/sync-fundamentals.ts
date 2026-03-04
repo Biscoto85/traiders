@@ -170,10 +170,10 @@ export async function runSyncFundamentals(
             select: { lastPrice: true },
           });
           const lastPrice = currentStock?.lastPrice ?? null;
-          const w52High = safeNum(data.Technicals["52WeekHigh"]);
-          const w52Low = safeNum(data.Technicals["52WeekLow"]);
-          const mktCap = safeNum(data.Highlights.MarketCapitalization);
-          const ebitda = safeNum(data.Highlights.EBITDA);
+          const w52High = safeNum(data.Technicals?.["52WeekHigh"]);
+          const w52Low = safeNum(data.Technicals?.["52WeekLow"]);
+          const mktCap = safeNum(data.Highlights?.MarketCapitalization);
+          const ebitda = safeNum(data.Highlights?.EBITDA);
 
           // Derive ratios from latest quarterly balance sheet
           const latestQBS = Object.values(
@@ -247,11 +247,11 @@ export async function runSyncFundamentals(
           }
 
           // Compute quality score
-          const roe = safeNum(data.Highlights.ReturnOnEquityTTM);
-          const netMargin = safeNum(data.Highlights.ProfitMargin);
-          const revenueGrowth = safeNum(data.Highlights.QuarterlyRevenueGrowthYOY);
-          const earningsGrowth = safeNum(data.Highlights.QuarterlyEarningsGrowthYOY);
-          const peRatio = safeNum(data.Valuation.TrailingPE);
+          const roe = safeNum(data.Highlights?.ReturnOnEquityTTM);
+          const netMargin = safeNum(data.Highlights?.ProfitMargin);
+          const revenueGrowth = safeNum(data.Highlights?.QuarterlyRevenueGrowthYOY);
+          const earningsGrowth = safeNum(data.Highlights?.QuarterlyEarningsGrowthYOY);
+          const peRatio = safeNum(data.Valuation?.TrailingPE);
 
           const qualityScore = computeQualityScore({
             roe,
@@ -268,21 +268,21 @@ export async function runSyncFundamentals(
           });
 
           // Sanitize all API numeric fields before DB write
-          const grossProfitTTM = safeNum(data.Highlights.GrossProfitTTM);
-          const revenueTTM = safeNum(data.Highlights.RevenueTTM);
+          const grossProfitTTM = safeNum(data.Highlights?.GrossProfitTTM);
+          const revenueTTM = safeNum(data.Highlights?.RevenueTTM);
 
           // Update denormalized fields on Stock
           await prisma.stock.update({
             where: { id: stock.id },
             data: {
-              sector: data.General.Sector || null,
-              industry: data.General.Industry || null,
+              sector: data.General?.Sector || null,
+              industry: data.General?.Industry || null,
               marketCap: mktCap,
               peRatio,
-              forwardPe: safeNum(data.Valuation.ForwardPE),
-              pegRatio: safeNum(data.Highlights.PEGRatio),
-              eps: safeNum(data.Highlights.EarningsShare),
-              dilutedEps: safeNum(data.Highlights.DilutedEpsTTM),
+              forwardPe: safeNum(data.Valuation?.ForwardPE),
+              pegRatio: safeNum(data.Highlights?.PEGRatio),
+              eps: safeNum(data.Highlights?.EarningsShare),
+              dilutedEps: safeNum(data.Highlights?.DilutedEpsTTM),
               revenue: revenueTTM,
               revenueGrowth,
               earningsGrowth,
@@ -290,19 +290,19 @@ export async function runSyncFundamentals(
                 grossProfitTTM != null && revenueTTM != null && revenueTTM !== 0
                   ? grossProfitTTM / revenueTTM
                   : null,
-              operatingMargin: safeNum(data.Highlights.OperatingMarginTTM),
+              operatingMargin: safeNum(data.Highlights?.OperatingMarginTTM),
               netMargin,
               roe,
-              roa: safeNum(data.Highlights.ReturnOnAssetsTTM),
-              dividendYield: safeNum(data.Highlights.DividendYield),
-              beta: safeNum(data.Technicals.Beta),
+              roa: safeNum(data.Highlights?.ReturnOnAssetsTTM),
+              dividendYield: safeNum(data.Highlights?.DividendYield),
+              beta: safeNum(data.Technicals?.Beta),
               week52High: w52High,
               week52Low: w52Low,
-              evToEbitda: safeNum(data.Valuation.EnterpriseValueEbitda),
-              evToRevenue: safeNum(data.Valuation.EnterpriseValueRevenue),
-              pbRatio: safeNum(data.Valuation.PriceBookMRQ),
-              psRatio: safeNum(data.Valuation.PriceSalesTTM),
-              enterpriseValue: safeNum(data.Valuation.EnterpriseValue),
+              evToEbitda: safeNum(data.Valuation?.EnterpriseValueEbitda),
+              evToRevenue: safeNum(data.Valuation?.EnterpriseValueRevenue),
+              pbRatio: safeNum(data.Valuation?.PriceBookMRQ),
+              psRatio: safeNum(data.Valuation?.PriceSalesTTM),
+              enterpriseValue: safeNum(data.Valuation?.EnterpriseValue),
               ebitda,
               freeCashFlow: fcf,
               fcfYield,
@@ -318,7 +318,7 @@ export async function runSyncFundamentals(
               currentRatio,
               debtToEquity,
               qualityScore,
-              targetPrice: safeNum(data.Highlights.WallStreetTargetPrice),
+              targetPrice: safeNum(data.Highlights?.WallStreetTargetPrice),
               pctInsiders: safeNum(data.SharesStats?.PercentInsiders),
               pctInstitutions: safeNum(data.SharesStats?.PercentInstitutions),
               shortPctFloat: safeNum(data.SharesStats?.ShortPercentFloat),
