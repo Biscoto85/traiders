@@ -2,7 +2,6 @@ import type { PrismaClient } from "@prisma/client";
 import type { EODHDClient } from "@stock-screener/eodhd-client";
 
 const BATCH_SIZE = 200;
-const LOOKUP_BATCH = 20000; // PostgreSQL max 32767 bind variables
 
 /**
  * Sync end-of-day prices for all configured exchanges.
@@ -42,27 +41,24 @@ export async function runSyncEod(
         return;
       }
 
-      console.log(`[${jobName}] Fetching bulk EOD for ${exchangeId}...`);
+      // Build ticker → stockId map first so we can request only our tickers
+      const stocks = await prisma.stock.findMany({
+        where: { exchangeId, active: true },
+        select: { id: true, ticker: true },
+      });
+      const stockMap = new Map<string, string>();
+      for (const s of stocks) {
+        stockMap.set(s.ticker, s.id);
+      }
 
-      const bulkData = await eodhd.bulk.getEod(exchangeId);
+      const symbolList = Array.from(stockMap.keys());
+      console.log(`[${jobName}] Fetching bulk EOD for ${exchangeId} (${symbolList.length} symbols)...`);
+
+      const bulkData = await eodhd.bulk.getEod(exchangeId, { symbols: symbolList });
 
       if (!bulkData.length) {
         console.log(`[${jobName}] ${exchangeId}: no data returned`);
         continue;
-      }
-
-      // Build ticker → stockId map (batched to stay under PostgreSQL bind variable limit)
-      const tickers = bulkData.map((d) => d.code);
-      const stockMap = new Map<string, string>();
-      for (let j = 0; j < tickers.length; j += LOOKUP_BATCH) {
-        const tickerBatch = tickers.slice(j, j + LOOKUP_BATCH);
-        const stocks = await prisma.stock.findMany({
-          where: { ticker: { in: tickerBatch }, exchangeId },
-          select: { id: true, ticker: true },
-        });
-        for (const s of stocks) {
-          stockMap.set(s.ticker, s.id);
-        }
       }
 
       // Process in batches

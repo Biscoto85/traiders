@@ -86,9 +86,8 @@ export class EODHDClient {
           headers: { Accept: "application/json" },
         });
 
-        clearTimeout(timeoutId);
-
         if (!response.ok) {
+          clearTimeout(timeoutId);
           const body = await response.text().catch(() => "");
           throw new EODHDError(
             `EODHD API error ${response.status}: ${body}`,
@@ -98,6 +97,7 @@ export class EODHDClient {
         }
 
         const data = (await response.json()) as T;
+        clearTimeout(timeoutId);
         return data;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
