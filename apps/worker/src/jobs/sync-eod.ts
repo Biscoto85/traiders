@@ -66,11 +66,18 @@ export async function runSyncEod(
         const batch = bulkData.slice(i, i + BATCH_SIZE);
 
         const operations = batch
-          .filter((item) => stockMap.has(item.code))
+          .filter((item) => {
+            if (!stockMap.has(item.code)) return false;
+            const d = new Date(item.date);
+            if (isNaN(d.getTime())) return false;
+            if (!Number.isFinite(item.close)) return false;
+            return true;
+          })
           .flatMap((item) => {
             const stockId = stockMap.get(item.code)!;
             const priceDate = new Date(item.date);
             const vol = Number.isFinite(item.volume) ? BigInt(Math.round(item.volume)) : BigInt(0);
+            const num = (v: number) => (Number.isFinite(v) ? v : null);
 
             return [
               prisma.dailyPrice.upsert({
@@ -78,17 +85,17 @@ export async function runSyncEod(
                 create: {
                   stockId,
                   date: priceDate,
-                  open: item.open,
-                  high: item.high,
-                  low: item.low,
+                  open: num(item.open),
+                  high: num(item.high),
+                  low: num(item.low),
                   close: item.close,
                   adjClose: item.adjusted_close,
                   volume: vol,
                 },
                 update: {
-                  open: item.open,
-                  high: item.high,
-                  low: item.low,
+                  open: num(item.open),
+                  high: num(item.high),
+                  low: num(item.low),
                   close: item.close,
                   adjClose: item.adjusted_close,
                   volume: vol,
