@@ -6,8 +6,12 @@
  *
  * All related DailyPrice, Fundamentals, and Bookmark rows are cascade-deleted.
  */
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+import { existsSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
+
+// Load .env.production if it exists, otherwise fall back to .env
+loadEnv({ path: existsSync(".env.production") ? ".env.production" : ".env" });
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
