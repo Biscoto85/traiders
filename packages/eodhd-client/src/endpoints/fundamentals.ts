@@ -180,7 +180,6 @@ export class FundamentalsEndpoint {
 
   /**
    * Get the constituents of a stock index.
-   * Uses the fundamentals endpoint with Components filter.
    * Costs 10 API calls per request.
    *
    * @example
@@ -190,9 +189,10 @@ export class FundamentalsEndpoint {
   async getIndexComponents(
     indexTicker: string,
   ): Promise<Record<string, EODHDIndexComponent>> {
+    // Don't use filter param — EODHD ignores it for index endpoints
     const data = await this.client.fetch<{
       Components?: Record<string, EODHDIndexComponent>;
-    }>(`/fundamentals/${indexTicker}.INDX`, { filter: "Components" });
+    }>(`/fundamentals/${indexTicker}.INDX`);
     return data.Components ?? {};
   }
 

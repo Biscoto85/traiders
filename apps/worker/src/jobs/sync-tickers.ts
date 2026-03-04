@@ -19,15 +19,29 @@ async function buildIndexWhitelist(
 
   for (const indexTicker of indices) {
     console.log(`[sync-tickers] Fetching constituents for ${indexTicker}.INDX...`);
-    const components = await eodhd.fundamentals.getIndexComponents(indexTicker);
+    try {
+      const components = await eodhd.fundamentals.getIndexComponents(indexTicker);
+      const count = Object.keys(components).length;
 
-    for (const comp of Object.values(components)) {
-      const exchangeId = comp.Exchange;
-      if (!whitelist.has(exchangeId)) {
-        whitelist.set(exchangeId, new Set());
+      if (count === 0) {
+        console.warn(`[sync-tickers] ${indexTicker}.INDX returned 0 components — check API plan or index code`);
+        continue;
       }
-      whitelist.get(exchangeId)!.add(comp.Code);
-      totalComponents++;
+
+      console.log(`[sync-tickers] ${indexTicker}.INDX: ${count} components`);
+
+      for (const comp of Object.values(components)) {
+        const exchangeId = comp.Exchange;
+        if (!whitelist.has(exchangeId)) {
+          whitelist.set(exchangeId, new Set());
+        }
+        whitelist.get(exchangeId)!.add(comp.Code);
+        totalComponents++;
+      }
+    } catch (err) {
+      console.error(
+        `[sync-tickers] Failed to fetch ${indexTicker}.INDX: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
@@ -97,6 +111,17 @@ export async function runSyncTickers(
         return;
       }
 
+      // Skip exchanges with no index constituents early (saves an API call)
+      if (whitelist) {
+        const allowedTickers = whitelist.get(exchangeId);
+        if (!allowedTickers || allowedTickers.size === 0) {
+          console.log(
+            `[${jobName}] ${exchangeId}: no index constituents — skipping`,
+          );
+          continue;
+        }
+      }
+
       // Ensure exchange record exists
       const exInfo = exchangeInfo.find((e) => e.Code === exchangeId);
 
@@ -119,18 +144,20 @@ export async function runSyncTickers(
       }
 
       // Fetch all symbols for this exchange
-      let symbols = await eodhd.eod.getExchangeSymbols(exchangeId);
+      let symbols: Awaited<ReturnType<typeof eodhd.eod.getExchangeSymbols>>;
+      try {
+        symbols = await eodhd.eod.getExchangeSymbols(exchangeId);
+      } catch (err) {
+        console.error(
+          `[${jobName}] ${exchangeId}: failed to fetch symbols — ${err instanceof Error ? err.message : err}`,
+        );
+        continue;
+      }
       const totalOnExchange = symbols.length;
 
       // Filter by index whitelist if configured
       if (whitelist) {
-        const allowedTickers = whitelist.get(exchangeId);
-        if (!allowedTickers || allowedTickers.size === 0) {
-          console.log(
-            `[${jobName}] ${exchangeId}: no index constituents — skipping`,
-          );
-          continue;
-        }
+        const allowedTickers = whitelist.get(exchangeId)!;
         symbols = symbols.filter((s) => allowedTickers.has(s.Code));
         console.log(
           `[${jobName}] ${exchangeId}: ${symbols.length} index members out of ${totalOnExchange} total symbols`,
