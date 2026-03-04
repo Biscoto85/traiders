@@ -130,26 +130,31 @@ export async function runSyncTickers(
         }
       }
 
-      // Ensure exchange record exists
+      // Ensure exchange record exists before inserting stocks
       const exInfo = exchangeInfo.find((e) => e.Code === exchangeId);
 
-      if (exInfo) {
-        await prisma.exchange.upsert({
-          where: { id: exchangeId },
-          create: {
-            id: exchangeId,
-            name: exInfo.Name,
-            country: exInfo.Country,
-            currency: exInfo.Currency,
-            timezone: "UTC", // EODHD doesn't provide timezone directly
-          },
-          update: {
-            name: exInfo.Name,
-            country: exInfo.Country,
-            currency: exInfo.Currency,
-          },
-        });
+      if (!exInfo) {
+        console.warn(
+          `[${jobName}] ${exchangeId}: not found in EODHD exchange list — skipping (available codes may differ)`,
+        );
+        continue;
       }
+
+      await prisma.exchange.upsert({
+        where: { id: exchangeId },
+        create: {
+          id: exchangeId,
+          name: exInfo.Name,
+          country: exInfo.Country,
+          currency: exInfo.Currency,
+          timezone: "UTC",
+        },
+        update: {
+          name: exInfo.Name,
+          country: exInfo.Country,
+          currency: exInfo.Currency,
+        },
+      });
 
       // Fetch all symbols for this exchange
       let symbols: Awaited<ReturnType<typeof eodhd.eod.getExchangeSymbols>>;
