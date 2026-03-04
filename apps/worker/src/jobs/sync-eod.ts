@@ -43,7 +43,7 @@ export async function runSyncEod(
 
       // Build ticker → stockId map first so we can request only our tickers
       const stocks = await prisma.stock.findMany({
-        where: { exchangeId, active: true },
+        where: { exchangeId, isActive: true },
         select: { id: true, ticker: true },
       });
       const stockMap = new Map<string, string>();
