@@ -215,7 +215,13 @@ export const api = {
     }),
 
   adminAbortSync: () =>
-    request<{ success: true; data: { message: string } }>("/admin/sync-abort", {
+    request<{ success: true; data: { message: string; resetCount?: number } }>("/admin/sync-abort", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  adminResetSync: (jobName: string) =>
+    request<{ success: true; data: { message: string } }>(`/admin/sync-reset/${jobName}`, {
       method: "POST",
       body: JSON.stringify({}),
     }),

@@ -176,6 +176,9 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  /** Max time (ms) before a "running" job is considered crashed/stale */
+  const STALE_JOB_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
+
   /**
    * GET /admin/sync-status — View sync job statuses
    */
@@ -187,28 +190,50 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       where: { key: "PENDING_SYNC" },
     });
     const pendingSync = pending?.value ?? null;
+    const now = Date.now();
 
     // Derive status & details from raw fields for the frontend
-    const enriched = jobs.map((job) => ({
-      jobName: job.jobName,
-      lastRunAt: job.lastRunAt?.toISOString() ?? null,
-      updatedAt: job.updatedAt.toISOString(),
-      status: pendingSync === job.jobName
-        ? "pending"
-        : (job.durationMs === null && job.lastRunAt && !job.lastError)
-          ? "running"
-          : job.lastError
-            ? "error"
-            : job.lastSuccessAt
-              ? "success"
-              : "unknown",
-      details: job.lastError
-        ?? (job.durationMs === null && job.lastRunAt && !job.lastError
-          ? "En cours d'execution..."
-          : job.tickersProcessed
-            ? `${job.tickersProcessed} tickers en ${((job.durationMs ?? 0) / 1000).toFixed(0)}s`
-            : null),
-    }));
+    const enriched = jobs.map((job) => {
+      const looksRunning = job.durationMs === null && job.lastRunAt && !job.lastError;
+      const isStale = looksRunning && (now - job.lastRunAt!.getTime()) > STALE_JOB_THRESHOLD_MS;
+
+      let status: string;
+      if (pendingSync === job.jobName) {
+        status = "pending";
+      } else if (looksRunning && !isStale) {
+        status = "running";
+      } else if (isStale) {
+        status = "error";
+      } else if (job.lastError) {
+        status = "error";
+      } else if (job.lastSuccessAt) {
+        status = "success";
+      } else {
+        status = "unknown";
+      }
+
+      let details: string | null;
+      if (isStale) {
+        const hours = Math.round((now - job.lastRunAt!.getTime()) / 3_600_000);
+        details = `Job bloque depuis ${hours}h (crash probable). Utilisez "Forcer le reset" pour debloquer.`;
+      } else if (job.lastError) {
+        details = job.lastError;
+      } else if (looksRunning) {
+        details = "En cours d'execution...";
+      } else if (job.tickersProcessed) {
+        details = `${job.tickersProcessed} tickers en ${((job.durationMs ?? 0) / 1000).toFixed(0)}s`;
+      } else {
+        details = null;
+      }
+
+      return {
+        jobName: job.jobName,
+        lastRunAt: job.lastRunAt?.toISOString() ?? null,
+        updatedAt: job.updatedAt.toISOString(),
+        status,
+        details,
+      };
+    });
 
     return reply.send({ success: true, data: enriched, pendingSync });
   });
@@ -254,7 +279,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
-   * POST /admin/sync-abort — Request abort of the currently running sync
+   * POST /admin/sync-abort — Request abort of the currently running sync.
+   * Also force-resets any stale "running" jobs (crashed worker).
    */
   fastify.post("/admin/sync-abort", async (_request, reply) => {
     // Clear any pending sync too
@@ -267,8 +293,73 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       update: { value: "requested" },
     });
 
-    return reply.send({ success: true, data: { message: "Arret demande. Le job s'arretera sous quelques secondes." } });
+    // Force-reset stale jobs (running > 4h = likely crashed)
+    const now = Date.now();
+    const staleThreshold = new Date(now - STALE_JOB_THRESHOLD_MS);
+    const staleJobs = await fastify.prisma.syncJob.findMany({
+      where: {
+        durationMs: null,
+        lastRunAt: { not: null, lt: staleThreshold },
+        lastError: null,
+      },
+    });
+
+    for (const job of staleJobs) {
+      const durationMs = now - job.lastRunAt!.getTime();
+      await fastify.prisma.syncJob.update({
+        where: { jobName: job.jobName },
+        data: {
+          lastError: `[RESET] Job bloque depuis ${Math.round(durationMs / 3_600_000)}h — reset par l'admin`,
+          durationMs: Math.round(durationMs),
+        },
+      });
+    }
+
+    const resetCount = staleJobs.length;
+    const message = resetCount > 0
+      ? `Arret demande + ${resetCount} job(s) bloque(s) reinitialise(s).`
+      : "Arret demande. Le job s'arretera sous quelques secondes.";
+
+    return reply.send({ success: true, data: { message, resetCount } });
   });
+
+  /**
+   * POST /admin/sync-reset/:jobName — Force-reset a stuck job to error state
+   */
+  fastify.post<{ Params: { jobName: string } }>(
+    "/admin/sync-reset/:jobName",
+    async (request, reply) => {
+      const { jobName } = request.params;
+
+      const job = await fastify.prisma.syncJob.findUnique({ where: { jobName } });
+      if (!job) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Job non trouve" },
+        });
+      }
+
+      // Only allow resetting jobs that appear stuck (durationMs is null = "running")
+      if (job.durationMs !== null) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: "Ce job n'est pas bloque (statut non-running)" },
+        });
+      }
+
+      const durationMs = job.lastRunAt ? Date.now() - job.lastRunAt.getTime() : 0;
+
+      await fastify.prisma.syncJob.update({
+        where: { jobName },
+        data: {
+          lastError: `[RESET] Force-reset par l'admin apres ${Math.round(durationMs / 3_600_000)}h`,
+          durationMs: Math.round(durationMs),
+        },
+      });
+
+      return reply.send({ success: true, data: { message: `Job "${jobName}" reinitialise.` } });
+    },
+  );
 
   // ── System Configuration ──────────────────────────────────
 

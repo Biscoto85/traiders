@@ -430,12 +430,13 @@ export async function runSyncFundamentals(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const durationMs = Date.now() - startedAt.getTime();
     console.error(`[${jobName}] Fatal:`, message);
 
     await prisma.syncJob.upsert({
       where: { jobName },
-      create: { jobName, lastRunAt: startedAt, lastError: message },
-      update: { lastRunAt: startedAt, lastError: message },
+      create: { jobName, lastRunAt: startedAt, lastError: message, durationMs },
+      update: { lastRunAt: startedAt, lastError: message, durationMs },
     });
   }
 }

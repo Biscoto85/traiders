@@ -40,6 +40,34 @@ async function main() {
   const syncMode = await getSyncMode(prisma);
   console.log(`Sync mode: ${syncMode} (${syncMode === "full" ? "All-in-One plan — fundamentals enabled" : "All World plan — fundamentals skipped"})`);
 
+  // ── Clean up stale "running" jobs from previous crashes ──
+  // A job with durationMs=null and no error is considered "running".
+  // If lastRunAt is > 4h ago, the previous worker likely crashed.
+  const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+  const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
+  const staleJobs = await prisma.syncJob.findMany({
+    where: {
+      durationMs: null,
+      lastRunAt: { not: null, lt: staleThreshold },
+      lastError: null,
+    },
+  });
+  for (const job of staleJobs) {
+    const elapsed = Date.now() - job.lastRunAt!.getTime();
+    await prisma.syncJob.update({
+      where: { jobName: job.jobName },
+      data: {
+        lastError: `[CRASH] Worker redemarre — job bloque depuis ${Math.round(elapsed / 3_600_000)}h`,
+        durationMs: Math.round(elapsed),
+      },
+    });
+    console.log(`[startup] Reset stale job "${job.jobName}" (was running for ${Math.round(elapsed / 3_600_000)}h)`);
+  }
+  // Clear any leftover abort/pending signals from previous instance
+  await prisma.systemConfig.deleteMany({
+    where: { key: { in: ["ABORT_SYNC", "PENDING_SYNC"] } },
+  });
+
   const eodhd = new EODHDClient({
     apiKey: config.eodhd.apiKey,
     baseUrl: config.eodhd.baseUrl,

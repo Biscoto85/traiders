@@ -408,7 +408,20 @@ function SyncTab() {
       const res = await api.adminAbortSync();
       setMessage({ text: res.data.message, type: "success" });
       setPendingSync(null);
-      setTimeout(loadJobs, 3_000);
+      setTimeout(loadJobs, 2_000);
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Erreur", type: "error" });
+    }
+  }
+
+  async function handleForceReset(jobName: string) {
+    const label = SYNC_JOB_LABELS[jobName] ?? jobName;
+    if (!confirm(`Forcer le reset du job "${label}" ? Son statut passera en erreur et vous pourrez relancer une sync.`)) return;
+    setMessage(null);
+    try {
+      const res = await api.adminResetSync(jobName);
+      setMessage({ text: res.data.message, type: "success" });
+      setTimeout(loadJobs, 1_000);
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : "Erreur", type: "error" });
     }
@@ -509,32 +522,48 @@ function SyncTab() {
                 <th>Derniere execution</th>
                 <th>Details</th>
                 <th>Mis a jour</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job) => (
-                <tr key={job.jobName}>
-                  <td><strong>{job.jobName}</strong></td>
-                  <td>
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        padding: "0.125rem 0.5rem",
-                        borderRadius: "0.25rem",
-                        background: statusColor(job.status),
-                        color: "white",
-                      }}
-                    >
-                      {job.status}
-                    </span>
-                  </td>
-                  <td>{formatDate(job.lastRunAt)}</td>
-                  <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {job.details ?? "—"}
-                  </td>
-                  <td>{formatDate(job.updatedAt)}</td>
-                </tr>
-              ))}
+              {jobs.map((job) => {
+                const isStale = job.status === "error" && job.details?.includes("bloque depuis");
+                const isRunning = job.status === "running";
+                return (
+                  <tr key={job.jobName}>
+                    <td><strong>{job.jobName}</strong></td>
+                    <td>
+                      <span
+                        style={{
+                          fontSize: "0.75rem",
+                          padding: "0.125rem 0.5rem",
+                          borderRadius: "0.25rem",
+                          background: statusColor(job.status),
+                          color: "white",
+                        }}
+                      >
+                        {isStale ? "bloque" : job.status}
+                      </span>
+                    </td>
+                    <td>{formatDate(job.lastRunAt)}</td>
+                    <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={job.details ?? undefined}>
+                      {job.details ?? "—"}
+                    </td>
+                    <td>{formatDate(job.updatedAt)}</td>
+                    <td>
+                      {(isStale || isRunning) && (
+                        <button
+                          className="btn btn-ghost"
+                          style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem", color: "var(--danger)" }}
+                          onClick={() => handleForceReset(job.jobName)}
+                        >
+                          Forcer le reset
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
