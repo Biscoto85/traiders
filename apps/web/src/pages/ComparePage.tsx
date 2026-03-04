@@ -17,31 +17,32 @@ function scoreUp(value: number | null | undefined, t: [number, number, number, n
   return 0;
 }
 
-function scoreDown(value: number | null | undefined, t: [number, number, number, number]): number | null {
-  if (value == null || isNaN(value)) return null;
-  if (value <= t[0]) return 10;
-  if (value <= t[1]) return 8;
-  if (value <= t[2]) return 6;
-  if (value <= t[3]) return 3;
+function scorePriceToOCF(v: number | null | undefined): number | null {
+  if (v == null || isNaN(v)) return null;
+  if (v <= 0) return 0;
+  if (v <= 7) return 10;
+  if (v <= 12) return 8;
+  if (v <= 20) return 6;
+  if (v <= 30) return 3;
   return 0;
 }
 
-function scorePe(pe: number | null | undefined): number | null {
-  if (pe == null || isNaN(pe)) return null;
-  if (pe <= 0) return 0;
-  if (pe <= 10) return 10;
-  if (pe <= 15) return 8;
-  if (pe <= 20) return 6;
-  if (pe <= 30) return 3;
+function scoreNetDebtToOCF(v: number | null | undefined): number | null {
+  if (v == null || isNaN(v)) return null;
+  if (v < 0) return 10;
+  if (v <= 1) return 10;
+  if (v <= 2) return 8;
+  if (v <= 3) return 6;
+  if (v <= 5) return 3;
   return 0;
 }
 
 interface SubScores {
-  rentabilite: number | null;
   croissance: number | null;
-  sante: number | null;
   valorisation: number | null;
-  cashFlow: number | null;
+  endettement: number | null;
+  valeur: number | null;
+  rentabilite: number | null;
 }
 
 function computeSubScores(s: StockDetail): SubScores {
@@ -51,22 +52,29 @@ function computeSubScores(s: StockDetail): SubScores {
     if (b != null) return b * 2;
     return null;
   };
+
+  const cagr5 = scoreUp(s.revenueCAGR5Y, [0.05, 0.10, 0.15, 0.25]);
+  const revG = scoreUp(s.revenueGrowth, [0.05, 0.10, 0.15, 0.25]);
+  const earnG = scoreUp(s.earningsGrowth, [0.05, 0.10, 0.15, 0.25]);
+  const growthRaw = cagr5 ?? revG ?? earnG;
+
+  const priceOcfRaw = scorePriceToOCF(s.priceToOCF);
+  const debtRaw = scoreNetDebtToOCF(s.netDebtToOCF);
+  const eqRaw = scoreUp(s.equityToMarketCap, [0.15, 0.30, 0.50, 0.80]);
+
   return {
+    croissance: growthRaw != null ? growthRaw * 2 : null,
+    valorisation: priceOcfRaw != null ? priceOcfRaw * 2 : null,
+    endettement: debtRaw != null ? debtRaw * 2 : null,
+    valeur: eqRaw != null ? eqRaw * 2 : null,
     rentabilite: avg(scoreUp(s.roe, [0.05, 0.10, 0.15, 0.20]), scoreUp(s.netMargin, [0.05, 0.10, 0.15, 0.20])),
-    croissance: avg(scoreUp(s.revenueGrowth, [0.05, 0.10, 0.15, 0.25]), scoreUp(s.earningsGrowth, [0.03, 0.08, 0.12, 0.20])),
-    sante: avg(scoreDown(s.debtToEquity, [0.3, 0.5, 1.0, 2.0]), scoreUp(s.currentRatio, [1.0, 1.2, 1.5, 2.0])),
-    valorisation: avg(scorePe(s.peRatio), scoreUp(s.fcfYield, [0.01, 0.03, 0.05, 0.08])),
-    cashFlow: avg(
-      scoreDown(s.priceToOCF, [8, 12, 18, 25]),
-      s.netDebtToOCF != null && s.netDebtToOCF < 0 ? 10 : scoreDown(s.netDebtToOCF, [1, 2, 3, 5]),
-    ),
   };
 }
 
 // ── Overlaid Radar Chart ──
 
 function CompareRadar({ stocks }: { stocks: Array<{ ticker: string; scores: SubScores; color: string }> }) {
-  const labels = ["Rentabilite", "Croissance", "Sante fin.", "Valorisation", "Cash Flow"];
+  const labels = ["Croissance", "Valorisation", "Endettement", "Valeur", "Rentabilite"];
   const cx = 140, cy = 140, maxR = 100;
   const n = 5;
   const angleStep = (2 * Math.PI) / n;
@@ -100,7 +108,7 @@ function CompareRadar({ stocks }: { stocks: Array<{ ticker: string; scores: SubS
         return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--bg-input)" strokeWidth="1" />;
       })}
       {stocks.map((s) => {
-        const vals = [s.scores.rentabilite, s.scores.croissance, s.scores.sante, s.scores.valorisation, s.scores.cashFlow];
+        const vals = [s.scores.croissance, s.scores.valorisation, s.scores.endettement, s.scores.valeur, s.scores.rentabilite];
         const pts = vals.map((v, i) => getPoint(i, v ?? 0));
         const path = pts.map((p) => `${p[0]},${p[1]}`).join(" ");
         return (

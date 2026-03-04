@@ -246,7 +246,7 @@ export async function runSyncFundamentals(
             // Skip CAGR if query fails
           }
 
-          // Compute quality score
+          // Compute quality score (Pikpik investment fund methodology)
           const roe = safeNum(data.Highlights?.ReturnOnEquityTTM);
           const netMargin = safeNum(data.Highlights?.ProfitMargin);
           const revenueGrowth = safeNum(data.Highlights?.QuarterlyRevenueGrowthYOY);
@@ -254,17 +254,14 @@ export async function runSyncFundamentals(
           const peRatio = safeNum(data.Valuation?.TrailingPE);
 
           const qualityScore = computeQualityScore({
-            roe,
-            netMargin,
-            revenueGrowth,
             revenueCAGR5Y,
+            revenueGrowth,
             earningsGrowth,
-            debtToEquity,
-            currentRatio,
-            peRatio,
-            fcfYield,
             priceToOCF,
             netDebtToOCF,
+            equityToMarketCap,
+            roe,
+            netMargin,
           });
 
           // Sanitize all API numeric fields before DB write

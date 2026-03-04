@@ -30,32 +30,32 @@ function scoreUp(value: number | null | undefined, thresholds: [number, number, 
   return 0;
 }
 
-function scoreDown(value: number | null | undefined, thresholds: [number, number, number, number]): number | null {
-  if (value == null || isNaN(value)) return null;
-  const [t10, t8, t6, t3] = thresholds;
-  if (value <= t10) return 10;
-  if (value <= t8) return 8;
-  if (value <= t6) return 6;
-  if (value <= t3) return 3;
+function scorePriceToOCF(v: number | null | undefined): number | null {
+  if (v == null || isNaN(v)) return null;
+  if (v <= 0) return 0;
+  if (v <= 7) return 10;
+  if (v <= 12) return 8;
+  if (v <= 20) return 6;
+  if (v <= 30) return 3;
   return 0;
 }
 
-function scorePeRatio(pe: number | null | undefined): number | null {
-  if (pe == null || isNaN(pe)) return null;
-  if (pe <= 0) return 0;
-  if (pe <= 10) return 10;
-  if (pe <= 15) return 8;
-  if (pe <= 20) return 6;
-  if (pe <= 30) return 3;
+function scoreNetDebtToOCF(v: number | null | undefined): number | null {
+  if (v == null || isNaN(v)) return null;
+  if (v < 0) return 10;
+  if (v <= 1) return 10;
+  if (v <= 2) return 8;
+  if (v <= 3) return 6;
+  if (v <= 5) return 3;
   return 0;
 }
 
 interface SubScores {
-  rentabilite: number | null;
   croissance: number | null;
-  sante: number | null;
   valorisation: number | null;
-  cashFlow: number | null;
+  endettement: number | null;
+  valeur: number | null;
+  rentabilite: number | null;
 }
 
 function computeSubScores(stock: StockDetail): SubScores {
@@ -66,35 +66,38 @@ function computeSubScores(stock: StockDetail): SubScores {
     return null;
   };
 
+  // 1. Croissance — TCAM 5Y > revenueGrowth > earningsGrowth
+  const cagr5 = scoreUp(stock.revenueCAGR5Y, [0.05, 0.10, 0.15, 0.25]);
+  const revG = scoreUp(stock.revenueGrowth, [0.05, 0.10, 0.15, 0.25]);
+  const earnG = scoreUp(stock.earningsGrowth, [0.05, 0.10, 0.15, 0.25]);
+  const growthRaw = cagr5 ?? revG ?? earnG;
+  const croissance = growthRaw != null ? growthRaw * 2 : null;
+
+  // 2. Valorisation — Capi / CF opérationnel
+  const priceOcfRaw = scorePriceToOCF(stock.priceToOCF);
+  const valorisation = priceOcfRaw != null ? priceOcfRaw * 2 : null;
+
+  // 3. Endettement — Dette nette / CF opérationnel
+  const debtRaw = scoreNetDebtToOCF(stock.netDebtToOCF);
+  const endettement = debtRaw != null ? debtRaw * 2 : null;
+
+  // 4. Valeur intrinsèque — Equity / Capitalisation
+  const eqRaw = scoreUp(stock.equityToMarketCap, [0.15, 0.30, 0.50, 0.80]);
+  const valeur = eqRaw != null ? eqRaw * 2 : null;
+
+  // 5. Rentabilité — ROE + Net Margin
   const roe = scoreUp(stock.roe, [0.05, 0.10, 0.15, 0.20]);
   const margin = scoreUp(stock.netMargin, [0.05, 0.10, 0.15, 0.20]);
   const rentabilite = avg(roe, margin);
 
-  const revGrowth = scoreUp(stock.revenueGrowth, [0.05, 0.10, 0.15, 0.25]);
-  const earnGrowth = scoreUp(stock.earningsGrowth, [0.03, 0.08, 0.12, 0.20]);
-  const croissance = avg(revGrowth, earnGrowth);
-
-  const debtEq = scoreDown(stock.debtToEquity, [0.3, 0.5, 1.0, 2.0]);
-  const curRatio = scoreUp(stock.currentRatio, [1.0, 1.2, 1.5, 2.0]);
-  const sante = avg(debtEq, curRatio);
-
-  const pe = scorePeRatio(stock.peRatio);
-  const fcfY = scoreUp(stock.fcfYield, [0.01, 0.03, 0.05, 0.08]);
-  const valorisation = avg(pe, fcfY);
-
-  const pOcf = scoreDown(stock.priceToOCF, [8, 12, 18, 25]);
-  let ndOcf = scoreDown(stock.netDebtToOCF, [1, 2, 3, 5]);
-  if (stock.netDebtToOCF != null && stock.netDebtToOCF < 0) ndOcf = 10;
-  const cashFlow = avg(pOcf, ndOcf);
-
-  return { rentabilite, croissance, sante, valorisation, cashFlow };
+  return { croissance, valorisation, endettement, valeur, rentabilite };
 }
 
 // ── Radar Chart (SVG) ──
 
 function RadarChart({ scores }: { scores: SubScores }) {
-  const labels = ["Rentabilite", "Croissance", "Sante fin.", "Valorisation", "Cash Flow"];
-  const values = [scores.rentabilite, scores.croissance, scores.sante, scores.valorisation, scores.cashFlow];
+  const labels = ["Croissance", "Valorisation", "Endettement", "Valeur", "Rentabilite"];
+  const values = [scores.croissance, scores.valorisation, scores.endettement, scores.valeur, scores.rentabilite];
 
   const cx = 120, cy = 120, maxR = 90;
   const n = 5;
@@ -603,11 +606,11 @@ export default function StockDetailPage() {
             </div>
             <div style={{ minWidth: 160 }}>
               {[
-                { label: "Rentabilite", val: subScores.rentabilite },
                 { label: "Croissance", val: subScores.croissance },
-                { label: "Sante fin.", val: subScores.sante },
                 { label: "Valorisation", val: subScores.valorisation },
-                { label: "Cash Flow", val: subScores.cashFlow },
+                { label: "Endettement", val: subScores.endettement },
+                { label: "Valeur", val: subScores.valeur },
+                { label: "Rentabilite", val: subScores.rentabilite },
               ].map((cat) => (
                 <div key={cat.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.375rem" }}>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{cat.label}</span>
