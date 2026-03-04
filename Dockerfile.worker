@@ -30,6 +30,8 @@ RUN pnpm --filter @stock-screener/api db:generate
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/eodhd-client/dist ./packages/eodhd-client/dist
 COPY --from=build /app/apps/worker/dist ./apps/worker/dist
+# Keep TS scripts so they can be run via: docker compose exec worker npx tsx src/scripts/...
+COPY --from=build /app/apps/worker/src/scripts ./apps/worker/src/scripts
 
 WORKDIR /app/apps/worker
 CMD ["node", "dist/index.js"]
