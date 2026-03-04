@@ -5,6 +5,7 @@ export type { EODHDConfig } from "./client.js";
 export type { EODHDEodBar, EODHDExchangeSymbol } from "./endpoints/eod.js";
 export type {
   EODHDFundamentals,
+  EODHDIndexComponent,
   EODHDBalanceSheet,
   EODHDIncomeStatement,
   EODHDCashFlow,

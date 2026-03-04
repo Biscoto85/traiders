@@ -29,6 +29,9 @@ async function getSyncMode(prisma: PrismaClient): Promise<SyncMode> {
 async function main() {
   console.log("Traiders Worker starting...");
   console.log(`Exchanges: ${config.exchanges.join(", ")}`);
+  if (config.indices.length > 0) {
+    console.log(`Index filter: ${config.indices.join(", ")} (only index constituents will be synced)`);
+  }
 
   const prisma = new PrismaClient({
     log: ["warn", "error"],
@@ -152,7 +155,7 @@ async function main() {
     cronTime: config.cron.syncTickers,
     onTick: () => {
       abortRequested = false;
-      runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort).catch((err) =>
+      runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort, config.indices).catch((err) =>
         console.error("Tickers sync cron error:", err),
       );
     },
@@ -195,7 +198,7 @@ async function main() {
     const initialMode = await getSyncMode(prisma);
     console.log("First run detected — starting initial data sync...");
     console.log("Step 1/3: Syncing ticker lists...");
-    await runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort);
+    await runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort, config.indices);
     console.log("Step 2/3: Syncing EOD prices...");
     await runSyncEod(prisma, eodhd, config.exchanges, shouldAbort);
     if (initialMode === "full") {
@@ -232,7 +235,7 @@ async function main() {
           await runCheckAlerts(prisma, mailConfig, config.appUrl);
           break;
         case "sync-tickers":
-          await runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort);
+          await runSyncTickers(prisma, eodhd, config.exchanges, shouldAbort, config.indices);
           break;
         case "sync-fundamentals":
           await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync, shouldAbort);

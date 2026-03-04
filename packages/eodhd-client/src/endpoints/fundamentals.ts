@@ -149,6 +149,14 @@ export interface EODHDCashFlow {
   [key: string]: string | null;
 }
 
+export interface EODHDIndexComponent {
+  Code: string;
+  Exchange: string;
+  Name: string;
+  Sector: string;
+  Industry: string;
+}
+
 // ─── Endpoint ───────────────────────────────────────────
 
 export class FundamentalsEndpoint {
@@ -168,6 +176,24 @@ export class FundamentalsEndpoint {
     return this.client.fetch<EODHDFundamentals>(
       `/fundamentals/${ticker}.${exchange}`,
     );
+  }
+
+  /**
+   * Get the constituents of a stock index.
+   * Uses the fundamentals endpoint with Components filter.
+   * Costs 10 API calls per request.
+   *
+   * @example
+   *   await client.fundamentals.getIndexComponents("GSPC"); // S&P 500
+   *   await client.fundamentals.getIndexComponents("FCHI"); // CAC 40
+   */
+  async getIndexComponents(
+    indexTicker: string,
+  ): Promise<Record<string, EODHDIndexComponent>> {
+    const data = await this.client.fetch<{
+      Components?: Record<string, EODHDIndexComponent>;
+    }>(`/fundamentals/${indexTicker}.INDX`, { filter: "Components" });
+    return data.Components ?? {};
   }
 
   /**

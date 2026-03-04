@@ -51,6 +51,21 @@ export const config = {
   /** Exchanges to sync. Add more as needed. */
   exchanges: optionalEnv("SYNC_EXCHANGES", "US").split(","),
 
+  /**
+   * Index whitelist. When set, sync-tickers only keeps stocks that belong
+   * to at least one of these indices. Empty = no filtering (sync all).
+   *
+   * Example: SYNC_INDICES=GSPC,NDX,DJI,FCHI,GDAXI,FTSE,N225,HSI
+   *
+   * Index codes (EODHD .INDX):
+   *   GSPC   = S&P 500          NDX    = Nasdaq 100
+   *   DJI    = Dow Jones 30     FCHI   = CAC 40 (Paris)
+   *   GDAXI  = DAX 40 (Frankfurt)  FTSE = FTSE 100 (London)
+   *   N225   = Nikkei 225 (Tokyo)   HSI  = Hang Seng (Hong Kong)
+   *   SSEC   = SSE Composite (Shanghai)
+   */
+  indices: optionalEnv("SYNC_INDICES", "").split(",").filter(Boolean),
+
   sync: {
     /** Skip stocks with known marketCap below this threshold (saves 10 API calls each). */
     minMarketCap: parseInt(optionalEnv("SYNC_MIN_MARKET_CAP", "50000000"), 10),

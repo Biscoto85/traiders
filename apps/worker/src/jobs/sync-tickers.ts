@@ -4,8 +4,43 @@ import type { EODHDClient } from "@stock-screener/eodhd-client";
 const BATCH_SIZE = 500;
 
 /**
+ * Build a whitelist of `ticker:exchange` pairs from EODHD index constituents.
+ * Each index costs 10 API calls. Returns null if no indices configured.
+ */
+async function buildIndexWhitelist(
+  eodhd: EODHDClient,
+  indices: string[],
+): Promise<Map<string, Set<string>> | null> {
+  if (indices.length === 0) return null;
+
+  // Map<exchangeId, Set<ticker>>
+  const whitelist = new Map<string, Set<string>>();
+  let totalComponents = 0;
+
+  for (const indexTicker of indices) {
+    console.log(`[sync-tickers] Fetching constituents for ${indexTicker}.INDX...`);
+    const components = await eodhd.fundamentals.getIndexComponents(indexTicker);
+
+    for (const comp of Object.values(components)) {
+      const exchangeId = comp.Exchange;
+      if (!whitelist.has(exchangeId)) {
+        whitelist.set(exchangeId, new Set());
+      }
+      whitelist.get(exchangeId)!.add(comp.Code);
+      totalComponents++;
+    }
+  }
+
+  console.log(
+    `[sync-tickers] Index whitelist: ${totalComponents} unique tickers across ${whitelist.size} exchanges`,
+  );
+
+  return whitelist;
+}
+
+/**
  * Sync exchange ticker lists.
- * Adds new tickers, deactivates removed ones.
+ * When indices are provided, only syncs stocks belonging to those indices.
  * Runs monthly.
  */
 export async function runSyncTickers(
@@ -13,6 +48,7 @@ export async function runSyncTickers(
   eodhd: EODHDClient,
   exchanges: string[],
   shouldAbort?: () => boolean,
+  indices?: string[],
 ): Promise<void> {
   const jobName = "sync-tickers";
   const startedAt = new Date();
@@ -29,6 +65,22 @@ export async function runSyncTickers(
   });
 
   try {
+    // Build index whitelist if configured
+    const whitelist = await buildIndexWhitelist(eodhd, indices ?? []);
+
+    if (whitelist) {
+      // When using indices, auto-expand exchanges to include all exchanges
+      // referenced in the index constituents
+      const indexExchanges = [...whitelist.keys()];
+      const missingExchanges = indexExchanges.filter((e) => !exchanges.includes(e));
+      if (missingExchanges.length > 0) {
+        console.log(
+          `[${jobName}] Auto-adding exchanges from indices: ${missingExchanges.join(", ")}`,
+        );
+        exchanges = [...exchanges, ...missingExchanges];
+      }
+    }
+
     // Fetch exchange list once (not per exchange)
     const exchangeInfo = await eodhd.eod.getExchangesList();
 
@@ -67,12 +119,29 @@ export async function runSyncTickers(
       }
 
       // Fetch all symbols for this exchange
-      const symbols = await eodhd.eod.getExchangeSymbols(exchangeId);
-      const remoteTickers = new Set(symbols.map((s) => s.Code));
+      let symbols = await eodhd.eod.getExchangeSymbols(exchangeId);
+      const totalOnExchange = symbols.length;
 
-      console.log(
-        `[${jobName}] ${exchangeId}: ${symbols.length} symbols from EODHD`,
-      );
+      // Filter by index whitelist if configured
+      if (whitelist) {
+        const allowedTickers = whitelist.get(exchangeId);
+        if (!allowedTickers || allowedTickers.size === 0) {
+          console.log(
+            `[${jobName}] ${exchangeId}: no index constituents — skipping`,
+          );
+          continue;
+        }
+        symbols = symbols.filter((s) => allowedTickers.has(s.Code));
+        console.log(
+          `[${jobName}] ${exchangeId}: ${symbols.length} index members out of ${totalOnExchange} total symbols`,
+        );
+      } else {
+        console.log(
+          `[${jobName}] ${exchangeId}: ${symbols.length} symbols from EODHD`,
+        );
+      }
+
+      const remoteTickers = new Set(symbols.map((s) => s.Code));
 
       // Upsert symbols in batches
       for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
@@ -107,9 +176,9 @@ export async function runSyncTickers(
         totalProcessed += batch.length;
       }
 
-      // Deactivate tickers no longer listed on the exchange.
-      // PostgreSQL limits bind variables to 32767 per statement, so if the
-      // remote ticker list is large we chunk the notIn query.
+      // Deactivate tickers no longer in the allowed set.
+      // With index filtering: deactivate anything NOT in the index whitelist.
+      // Without filtering: deactivate tickers no longer listed on the exchange.
       const remoteArray = [...remoteTickers];
       const CHUNK_SIZE = 15_000; // stay well under 32767 limit
       let deactivatedTotal = 0;
@@ -149,7 +218,7 @@ export async function runSyncTickers(
 
       if (deactivatedTotal > 0) {
         console.log(
-          `[${jobName}] ${exchangeId}: deactivated ${deactivatedTotal} delisted tickers`,
+          `[${jobName}] ${exchangeId}: deactivated ${deactivatedTotal} ${whitelist ? "non-index" : "delisted"} tickers`,
         );
       }
     }
