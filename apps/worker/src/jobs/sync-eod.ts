@@ -77,7 +77,7 @@ export async function runSyncEod(
             const stockId = stockMap.get(item.code)!;
             const priceDate = new Date(item.date);
             const vol = Number.isFinite(item.volume) ? BigInt(Math.round(item.volume)) : BigInt(0);
-            const num = (v: number) => (Number.isFinite(v) ? v : null);
+            const safe = (v: number) => (Number.isFinite(v) ? v : item.close);
 
             return [
               prisma.dailyPrice.upsert({
@@ -85,17 +85,17 @@ export async function runSyncEod(
                 create: {
                   stockId,
                   date: priceDate,
-                  open: num(item.open),
-                  high: num(item.high),
-                  low: num(item.low),
+                  open: safe(item.open),
+                  high: safe(item.high),
+                  low: safe(item.low),
                   close: item.close,
                   adjClose: item.adjusted_close,
                   volume: vol,
                 },
                 update: {
-                  open: num(item.open),
-                  high: num(item.high),
-                  low: num(item.low),
+                  open: safe(item.open),
+                  high: safe(item.high),
+                  low: safe(item.low),
                   close: item.close,
                   adjClose: item.adjusted_close,
                   volume: vol,
