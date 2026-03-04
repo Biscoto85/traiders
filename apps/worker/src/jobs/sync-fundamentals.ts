@@ -156,16 +156,24 @@ export async function runSyncFundamentals(
             return isNaN(n) ? null : n;
           };
 
+          /** Sanitize a numeric field that the API types as number|null
+           *  but may actually be a string like "NA" at runtime. */
+          const safeNum = (v: number | null | undefined): number | null => {
+            if (v == null) return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+          };
+
           // Fetch current lastPrice to compute relative fields
           const currentStock = await prisma.stock.findUnique({
             where: { id: stock.id },
             select: { lastPrice: true },
           });
           const lastPrice = currentStock?.lastPrice ?? null;
-          const w52High = data.Technicals["52WeekHigh"];
-          const w52Low = data.Technicals["52WeekLow"];
-          const mktCap = data.Highlights.MarketCapitalization;
-          const ebitda = data.Highlights.EBITDA;
+          const w52High = safeNum(data.Technicals["52WeekHigh"]);
+          const w52Low = safeNum(data.Technicals["52WeekLow"]);
+          const mktCap = safeNum(data.Highlights.MarketCapitalization);
+          const ebitda = safeNum(data.Highlights.EBITDA);
 
           // Derive ratios from latest quarterly balance sheet
           const latestQBS = Object.values(
@@ -239,19 +247,29 @@ export async function runSyncFundamentals(
           }
 
           // Compute quality score
+          const roe = safeNum(data.Highlights.ReturnOnEquityTTM);
+          const netMargin = safeNum(data.Highlights.ProfitMargin);
+          const revenueGrowth = safeNum(data.Highlights.QuarterlyRevenueGrowthYOY);
+          const earningsGrowth = safeNum(data.Highlights.QuarterlyEarningsGrowthYOY);
+          const peRatio = safeNum(data.Valuation.TrailingPE);
+
           const qualityScore = computeQualityScore({
-            roe: data.Highlights.ReturnOnEquityTTM,
-            netMargin: data.Highlights.ProfitMargin,
-            revenueGrowth: data.Highlights.QuarterlyRevenueGrowthYOY,
+            roe,
+            netMargin,
+            revenueGrowth,
             revenueCAGR5Y,
-            earningsGrowth: data.Highlights.QuarterlyEarningsGrowthYOY,
+            earningsGrowth,
             debtToEquity,
             currentRatio,
-            peRatio: data.Valuation.TrailingPE,
+            peRatio,
             fcfYield,
             priceToOCF,
             netDebtToOCF,
           });
+
+          // Sanitize all API numeric fields before DB write
+          const grossProfitTTM = safeNum(data.Highlights.GrossProfitTTM);
+          const revenueTTM = safeNum(data.Highlights.RevenueTTM);
 
           // Update denormalized fields on Stock
           await prisma.stock.update({
@@ -260,31 +278,31 @@ export async function runSyncFundamentals(
               sector: data.General.Sector || null,
               industry: data.General.Industry || null,
               marketCap: mktCap,
-              peRatio: data.Valuation.TrailingPE,
-              forwardPe: data.Valuation.ForwardPE,
-              pegRatio: data.Highlights.PEGRatio,
-              eps: data.Highlights.EarningsShare,
-              dilutedEps: data.Highlights.DilutedEpsTTM,
-              revenue: data.Highlights.RevenueTTM,
-              revenueGrowth: data.Highlights.QuarterlyRevenueGrowthYOY,
-              earningsGrowth: data.Highlights.QuarterlyEarningsGrowthYOY,
+              peRatio,
+              forwardPe: safeNum(data.Valuation.ForwardPE),
+              pegRatio: safeNum(data.Highlights.PEGRatio),
+              eps: safeNum(data.Highlights.EarningsShare),
+              dilutedEps: safeNum(data.Highlights.DilutedEpsTTM),
+              revenue: revenueTTM,
+              revenueGrowth,
+              earningsGrowth,
               grossMargin:
-                data.Highlights.GrossProfitTTM && data.Highlights.RevenueTTM
-                  ? data.Highlights.GrossProfitTTM / data.Highlights.RevenueTTM
+                grossProfitTTM != null && revenueTTM != null && revenueTTM !== 0
+                  ? grossProfitTTM / revenueTTM
                   : null,
-              operatingMargin: data.Highlights.OperatingMarginTTM,
-              netMargin: data.Highlights.ProfitMargin,
-              roe: data.Highlights.ReturnOnEquityTTM,
-              roa: data.Highlights.ReturnOnAssetsTTM,
-              dividendYield: data.Highlights.DividendYield,
-              beta: data.Technicals.Beta,
+              operatingMargin: safeNum(data.Highlights.OperatingMarginTTM),
+              netMargin,
+              roe,
+              roa: safeNum(data.Highlights.ReturnOnAssetsTTM),
+              dividendYield: safeNum(data.Highlights.DividendYield),
+              beta: safeNum(data.Technicals.Beta),
               week52High: w52High,
               week52Low: w52Low,
-              evToEbitda: data.Valuation.EnterpriseValueEbitda,
-              evToRevenue: data.Valuation.EnterpriseValueRevenue,
-              pbRatio: data.Valuation.PriceBookMRQ,
-              psRatio: data.Valuation.PriceSalesTTM,
-              enterpriseValue: data.Valuation.EnterpriseValue,
+              evToEbitda: safeNum(data.Valuation.EnterpriseValueEbitda),
+              evToRevenue: safeNum(data.Valuation.EnterpriseValueRevenue),
+              pbRatio: safeNum(data.Valuation.PriceBookMRQ),
+              psRatio: safeNum(data.Valuation.PriceSalesTTM),
+              enterpriseValue: safeNum(data.Valuation.EnterpriseValue),
               ebitda,
               freeCashFlow: fcf,
               fcfYield,
@@ -300,10 +318,10 @@ export async function runSyncFundamentals(
               currentRatio,
               debtToEquity,
               qualityScore,
-              targetPrice: data.Highlights.WallStreetTargetPrice,
-              pctInsiders: data.SharesStats?.PercentInsiders ?? null,
-              pctInstitutions: data.SharesStats?.PercentInstitutions ?? null,
-              shortPctFloat: data.SharesStats?.ShortPercentFloat ?? null,
+              targetPrice: safeNum(data.Highlights.WallStreetTargetPrice),
+              pctInsiders: safeNum(data.SharesStats?.PercentInsiders),
+              pctInstitutions: safeNum(data.SharesStats?.PercentInstitutions),
+              shortPctFloat: safeNum(data.SharesStats?.ShortPercentFloat),
               pctFrom52WeekHigh:
                 lastPrice != null && w52High != null && w52High !== 0
                   ? (lastPrice - w52High) / w52High
@@ -329,6 +347,10 @@ export async function runSyncFundamentals(
             const balance = quarterlyBS[dateKey];
             const cashFlow = quarterlyCF[dateKey];
             const periodDate = new Date(income.date);
+
+            // Skip entries with invalid dates
+            if (isNaN(periodDate.getTime())) continue;
+
             const quarter = Math.ceil((periodDate.getMonth() + 1) / 3);
             const year = periodDate.getFullYear();
             const period = `Q${quarter}-${year}`;
