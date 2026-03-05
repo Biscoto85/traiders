@@ -30,6 +30,11 @@ function scoreUp(value: number | null | undefined, thresholds: [number, number, 
   return 0;
 }
 
+function yahooFinanceUrl(ticker: string, exchangeId: string): string {
+  if (exchangeId === "US") return `https://finance.yahoo.com/quote/${ticker}`;
+  return `https://finance.yahoo.com/quote/${ticker}.${exchangeId}`;
+}
+
 function scorePriceToOCF(v: number | null | undefined): number | null {
   if (v == null || isNaN(v)) return null;
   if (v <= 0) return 0;
@@ -493,6 +498,16 @@ export default function StockDetailPage() {
             >
               Comparer
             </button>
+            <a
+              href={yahooFinanceUrl(stock.ticker, stock.exchangeId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-ghost"
+              style={{ fontSize: "0.75rem", padding: "0.25rem 0.5rem" }}
+              title="Voir sur Yahoo Finance"
+            >
+              Yahoo Finance ↗
+            </a>
             {stock.ticker}.{stock.exchangeId}
             <span style={{ fontWeight: 400, color: "var(--text-muted)", marginLeft: "0.75rem", fontSize: "1rem" }}>
               {stock.name}

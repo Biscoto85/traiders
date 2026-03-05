@@ -7,6 +7,7 @@ import { runSyncFundamentals } from "./jobs/sync-fundamentals.js";
 import { runSyncTickers } from "./jobs/sync-tickers.js";
 import { runEmailDigests } from "./jobs/send-email-digests.js";
 import { runCheckAlerts } from "./jobs/check-alerts.js";
+import { runBackfillEod } from "./jobs/backfill-eod.js";
 
 /**
  * Read the current SYNC_MODE from the DB (SystemConfig table).
@@ -240,6 +241,9 @@ async function main() {
         case "sync-fundamentals":
           await runSyncFundamentals(prisma, eodhd, config.exchanges, config.sync, shouldAbort);
           await runCheckAlerts(prisma, mailConfig, config.appUrl);
+          break;
+        case "backfill-eod":
+          await runBackfillEod(prisma, eodhd, config.exchanges, shouldAbort);
           break;
         default:
           console.warn(`[manual-trigger] Unknown job: ${jobName}`);

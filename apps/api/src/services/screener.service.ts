@@ -160,7 +160,11 @@ export function buildScreenerQuery(
   };
 
   const orderByField = fieldMapping[sortField] ?? "marketCap";
-  const orderBy = { [orderByField]: sortDir } as Prisma.StockOrderByWithRelationInput;
+  // Non-nullable text fields — everything else is nullable Float/Int
+  const NON_NULLABLE_FIELDS = new Set(["ticker", "name"]);
+  const orderBy = NON_NULLABLE_FIELDS.has(orderByField)
+    ? ({ [orderByField]: sortDir } as Prisma.StockOrderByWithRelationInput)
+    : ({ [orderByField]: { sort: sortDir, nulls: "last" } } as Prisma.StockOrderByWithRelationInput);
 
   return { where, orderBy };
 }

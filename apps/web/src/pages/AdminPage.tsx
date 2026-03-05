@@ -346,9 +346,10 @@ const SYNC_JOB_LABELS: Record<string, string> = {
   "sync-eod": "Prix EOD",
   "sync-tickers": "Tickers",
   "sync-fundamentals": "Fondamentaux",
+  "backfill-eod": "Backfill prix historiques",
 };
 
-const TRIGGERABLE_JOBS = ["sync-eod", "sync-tickers", "sync-fundamentals"];
+const TRIGGERABLE_JOBS = ["sync-eod", "sync-tickers", "sync-fundamentals", "backfill-eod"];
 
 function SyncTab() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
