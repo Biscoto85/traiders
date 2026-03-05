@@ -425,9 +425,6 @@ export interface BookmarkedStock {
     dividendYield: number | null;
     revenueGrowth: number | null;
     qualityScore: number | null;
-    priceChange1D: number | null;
-    priceChange1W: number | null;
-    priceChange1M: number | null;
   };
 }
 

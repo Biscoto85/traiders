@@ -1,16 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type BookmarkedStock } from "@/lib/api";
-import { formatMarketCap, formatPercent } from "@stock-screener/shared";
+import { formatMarketCap } from "@stock-screener/shared";
 
 function yahooFinanceUrl(ticker: string, exchangeId: string): string {
   if (exchangeId === "US") return `https://finance.yahoo.com/quote/${ticker}`;
   return `https://finance.yahoo.com/quote/${ticker}.${exchangeId}`;
-}
-
-function pctColor(v: number | null | undefined): string {
-  if (v == null) return "";
-  return v >= 0 ? "text-success" : "text-danger";
 }
 
 function scoreColor(score: number): string {
@@ -120,9 +115,6 @@ export default function FavoritesPage() {
               <th>Nom</th>
               <th>Secteur</th>
               <th style={{ textAlign: "right" }}>Prix</th>
-              <th style={{ textAlign: "right" }}>1J</th>
-              <th style={{ textAlign: "right" }}>1S</th>
-              <th style={{ textAlign: "right" }}>1M</th>
               <th style={{ textAlign: "right" }}>Mkt Cap</th>
               <th style={{ textAlign: "right" }}>Score</th>
               <th style={{ textAlign: "center" }}>Fiche</th>
@@ -155,21 +147,6 @@ export default function FavoritesPage() {
                   <td style={{ color: "var(--text-muted)" }}>{s.sector ?? "\u2014"}</td>
                   <td style={{ textAlign: "right", fontWeight: 600 }}>
                     {s.lastPrice?.toFixed(2) ?? "\u2014"}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <span className={pctColor(s.priceChange1D)}>
-                      {s.priceChange1D != null ? formatPercent(s.priceChange1D) : "\u2014"}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <span className={pctColor(s.priceChange1W)}>
-                      {s.priceChange1W != null ? formatPercent(s.priceChange1W) : "\u2014"}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <span className={pctColor(s.priceChange1M)}>
-                      {s.priceChange1M != null ? formatPercent(s.priceChange1M) : "\u2014"}
-                    </span>
                   </td>
                   <td style={{ textAlign: "right" }}>{formatMarketCap(s.marketCap)}</td>
                   <td style={{ textAlign: "right" }}>
